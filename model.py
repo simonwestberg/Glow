@@ -1,5 +1,6 @@
 # TensorFlow
 import tensorflow as tf
+import tensorflow_probability as tf_prob
 from tensorflow import keras
 from tensorflow.keras.layers import Layer
 import numpy as np
@@ -191,11 +192,16 @@ def log(x, base):
 
 class Glow(keras.Model):
 
-    def __init__(self, steps, levels):
+    def __init__(self, steps, levels, dimension):
         super(Glow, self).__init__()
 
         self.steps = steps  # Number of steps in each flow, K in the paper
         self.levels = levels    # Number of levels, L in the paper
+        self.dimension = dimension  # Dimension of input/latent space
+
+        # Normal distribution with 0 mean and std=1, defined over R^dimension
+        self.latent_distribution = tf_prob.distributions.MultivariateNormalDiag(
+            loc=[0.0]*dimension)
 
         self.squeeze = Squeeze()
         self.split = Split()
@@ -228,7 +234,8 @@ class Glow(keras.Model):
             
             x, z = self.split(x)
 
-            latent_variables.append(z)
+            latent_dim = np.prod(z.shape[1:])   # Dimension of extracted z
+            latent_variables.append(tf.reshape(z, [-1, latent_dim])) 
         
         # Last squeeze
         x = self.squeeze(x)
@@ -242,6 +249,16 @@ class Glow(keras.Model):
             # Affine coupling
             x = self.flow_layers[-1][k][2](x)
         
-        latent_variables.append(x)         
+        latent_dim = np.prod(x.shape[1:])   # Dimension of last latent variable
+        latent_variables.append(tf.reshape(x, [-1, latent_dim]))         
+
+        # Concatenate latent variables
+        latent_variables = tf.concat(latent_variables, axis=1)
+
+        latent_logprob = self.latent_distribution.log_prob(latent_variables)
+        latent_logprob = tf.reduce_mean(latent_logprob)
+
+        self.add_loss(-latent_logprob)
 
         return latent_variables
+    
