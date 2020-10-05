@@ -108,7 +108,7 @@ class AffineCoupling(Layer):
         """
         return inputs
 
-## Squeeze, no trainable parameters
+## Squeeze
 class Squeeze(Layer):
 
     def __init__(self):
@@ -128,24 +128,28 @@ class Squeeze(Layer):
 
         return outputs
 
-## Split, no trainable parameters?
+## Split, what the hell do they do in https://github.com/openai/glow ???
 class Split(Layer):
 
     def __init__(self):
         super(Split, self).__init__()
 
-    # Create the state of the layer (weights)
-    def build(self, input_shape):
-        pass
-
     # Defines the computation from inputs to outputs
-    def call(self, inputs):
+    def call(self, inputs, forward=True):
         """
         inputs: input tensor
         returns: output tensor
         """
+        b, h, w, c = inputs.shape   # Batch size, height, width, channels
 
-        return inputs, inputs
+        if forward:
+            z = inputs[:, :, :, 0:c // 2]
+            x = inputs[:, :, :, c // 2:]
+
+            return x, z
+        else:
+            # TODO, reverse
+            return inputs, inputs
 
 ## Step of flow
 class FlowStep(Layer):
