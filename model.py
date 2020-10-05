@@ -34,15 +34,41 @@ class ActNorm(Layer):
 
     # Create the state of the layer (weights)
     def build(self, input_shape):
-        pass
+        b, h, w, c = input_shape    # Batch size, height, width, channels
+
+        # TODO: add data-dependant initialization
+        self.scale = self.add_weight(
+            shape=(c, ),
+            initializer="random_normal",
+            trainable=True,
+        )
+        self.bias = self.add_weight(
+            shape=(c, ), 
+            initializer="random_normal", 
+            trainable=True
+        )
 
     # Defines the computation from inputs to outputs
-    def call(self, inputs):
+    def call(self, inputs, forward=True):
         """
         inputs: input tensor
         returns: output tensor
         """
-        return inputs
+        b, h, w, c = inputs.shape    # Batch size, height, width, channels
+
+        if forward:
+            outputs = tf.math.multiply(inputs, self.scale) + self.bias
+
+            # log-determinant of ActNorm layer in base 2
+            log2_s = log(tf.math.abs(self.scale), base=2)
+            logdet = h * w * tf.math.reduce_sum(log2_s)
+            self.add_loss(logdet)
+
+        else:
+            # Reverse operation
+            outputs = (inputs - self.bias) / self.scale 
+        
+        return outputs
 
 ## Permutation (1x1 convolution, reverse, or shuffle)
 class Permutation(Layer):
@@ -114,7 +140,6 @@ class Split(Layer):
         inputs: input tensor
         returns: output tensor
         """
-        print(inputs.shape)
         return inputs, inputs
 
 ## Step of flow
@@ -142,7 +167,17 @@ class FlowStep(Layer):
         x = self.coupling(x)
 
         return x
-        
+
+def log(x, base):
+    """
+    x: tensor
+    b: int
+    returns log_base(x)
+    """
+    numerator = tf.math.log(x)
+    denominator = tf.math.log(tf.constant(base, dtype=numerator.dtype))
+    return numerator / denominator
+    
 ### MODEL
 
 class Glow(keras.Model):
