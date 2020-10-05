@@ -62,7 +62,9 @@ class ActNorm(Layer):
             # log-determinant of ActNorm layer in base 2
             log2_s = log(tf.math.abs(self.scale), base=2)
             logdet = h * w * tf.math.reduce_sum(log2_s)
-            self.add_loss(logdet)
+            
+            # Loss for this layer is negative log-determinant
+            self.add_loss(-logdet)
 
         else:
             # Reverse operation
