@@ -106,23 +106,25 @@ class AffineCoupling(Layer):
         """
         return inputs
 
-## Squeeze, no trainable parameters?
+## Squeeze, no trainable parameters
 class Squeeze(Layer):
 
     def __init__(self):
         super(Squeeze, self).__init__()
 
-    # Create the state of the layer (weights)
-    def build(self, input_shape):
-        pass
-
     # Defines the computation from inputs to outputs
-    def call(self, inputs):
+    def call(self, inputs, forward=True):
         """
         inputs: input tensor
         returns: output tensor
         """
-        return inputs
+
+        if forward:
+            outputs = tf.nn.space_to_depth(inputs, block_size=2)
+        else:
+            outputs = tf.nn.depth_to_space(inputs, block_size=2)
+
+        return outputs
 
 ## Split, no trainable parameters?
 class Split(Layer):
@@ -140,6 +142,7 @@ class Split(Layer):
         inputs: input tensor
         returns: output tensor
         """
+
         return inputs, inputs
 
 ## Step of flow
@@ -177,7 +180,7 @@ def log(x, base):
     numerator = tf.math.log(x)
     denominator = tf.math.log(tf.constant(base, dtype=numerator.dtype))
     return numerator / denominator
-    
+
 ### MODEL
 
 class Glow(keras.Model):
