@@ -1,54 +1,91 @@
-
 import tensorflow as tf
-import numpy as np
+from tensorflow.keras.layers import Layer
 
-class NN:
 
-    def __init__(self, in_channels, mid_channels, input_shape, testing=True):
+class AffineCoupling(Layer):
 
-        if testing:
-            self.first_conv = tf.keras.layers.Conv2D(in_channels, kernel_size=3,
-                                                     activation='relu', strides=(1, 1), padding='same',
-                                                     input_shape=input_shape)
-        else:
-            self.first_conv = tf.keras.layers.Conv2D(in_channels, kernel_size=3,
-                                                     activation='relu', strides=(1, 1), padding='same')
-
-        self.second_conv = tf.keras.layers.Conv2D(mid_channels, kernel_size=1,
-                                                  activation='relu', strides=(1, 1), padding='same')
-
-        self.third_conv = tf.keras.layers.Conv2D(2*mid_channels, kernel_size=3,
-                                                 activation='relu', strides=(1, 1), padding='same')
-
-    def forward(self, x, actnorm=False):
+    def __init__(self, in_channels, out_channels):
         """
 
-        :param actnorm:
-        :param x: split of the data set
-        :return: returns the concatened output
+        :param in_channels: Number of filters used for the hidden layers of the NN() function, see GLOW paper
+        :param out_channels: Number of filters/output channels from the last convolutional layer
 
         """
-        # when actnorm is implemented
-        if actnorm:
-            pass
-        # possibly implement some other function as well?
-        else:
-            pass
+        super(AffineCoupling, self).__init__()
 
-        x = self.first_conv(x)
-        x = self.second_conv(x)
-        x = self.third_conv(x)
+        self.NN = tf.keras.Sequential()
+        self.NN.add(tf.keras.layers.Conv2D(in_channels, kernel_size=3,
+                                           activation='relu', strides=(1, 1), padding='same'))
+        self.NN.add(tf.keras.layers.Conv2D(in_channels, kernel_size=1,
+                                           activation='relu', strides=(1, 1), padding='same'))
+        self.NN.add(tf.keras.layers.Conv2D(out_channels, kernel_size=3,
+                                           activation='relu', strides=(1, 1), padding='same',
+                                           kernel_initializer=tf.keras.initializers.Zeros))
 
-        return x
+    def build(self, input_shape):
+
+        pass
+
+    # Defines the computation from inputs to outputs
+    def forward_call(self, inputs):
+        """
+        Computes the forward calculations of the affine coupling layer
+
+        inputs: A tensor with assumed dimensions: (batch_size x height x width x channels)
+        returns: A tensor, same dimensions as input tensor, for next step of flow and the scalar log determinant
+        """
+
+        # split along the channels, which is axis=3
+        x_a, x_b = tf.split(inputs, num_or_size_splits=2, axis=3)
+
+        # split along the channels again? to get log_s and t
+        log_s, t = tf.split(self.NN(x_b), num_or_size_splits=2, axis=3)
+        log_s = tf.math.log(log_s)
+        s = tf.math.exp(log_s)
+        y_a = tf.math.multiply(s, x_a) + t
+
+        y_b = x_b
+        output = tf.concat((y_a, y_b), axis=3)
+
+        log_det = tf.math.reduce_sum(log_s)
+
+        return output, log_det
+
+    def reverse_call(self, inputs):
+        """
+        Computes the reverse calculations of the affine coupling layer
+
+        :param inputs: A tensor with assumed dimensions: (batch_size x height x width x channels)
+        :return: A tensor, same dimensions as input tensor, for a reverse step of flow
+        """
+
+        y_a, y_b = tf.split(inputs, num_or_size_splits=2, axis=3)
+        log_s, t = tf.split(self.NN(y_b), num_or_size_splits=2, axis=3)
+        log_s = tf.math.log(log_s)
+        s = tf.math.exp(log_s)
+
+        x_a = tf.math.divide((y_a - t), s)
+        x_b = y_b
+        output = tf.concat((x_a, x_b), axis=3)
+
+        return output
 
 
 if __name__ == '__main__':
-    tensor_shape = (4, 28, 28, 3)
+
+    tf.random.set_seed(10)
+    tensor_shape = (4, 28, 28, 4)
     test_tensor = tf.random.normal(tensor_shape)
-    nn = NN(512, 512, tensor_shape[1:], testing=True)
-    output = nn.forward(test_tensor, actnorm=True)
-    print(test_tensor.shape)
-    print(output.shape)
+
+    aff_coup_layer = AffineCoupling(in_channels=512, out_channels=test_tensor.shape[-1] / 2)
+    forward_transf = aff_coup_layer.forward_call(test_tensor)
+    print(forward_transf[0].shape)
+    reverse_transf = aff_coup_layer.reverse_call(test_tensor)
+    print(reverse_transf.shape)
+
+
+
+
 
 
 
