@@ -113,53 +113,44 @@ class AffineCoupling(Layer):
                                            activation='relu', strides=(1, 1), padding='same',
                                            kernel_initializer=tf.keras.initializers.Zeros))
 
-    def build(self, input_shape):
-
-        pass
-
     # Defines the computation from inputs to outputs
-    def forward_call(self, inputs):
+    def call(self, inputs, forward=True):
         """
-        Computes the forward calculations of the affine coupling layer
+        Computes the forward/reverse calculations of the affine coupling layer
 
         inputs: A tensor with assumed dimensions: (batch_size x height x width x channels)
         returns: A tensor, same dimensions as input tensor, for next step of flow and the scalar log determinant
         """
 
-        # split along the channels, which is axis=3
-        x_a, x_b = tf.split(inputs, num_or_size_splits=2, axis=3)
+        if forward:
+            # split along the channels, which is axis=3
+            x_a, x_b = tf.split(inputs, num_or_size_splits=2, axis=3)
 
-        # split along the channels again? to get log_s and t
-        log_s, t = tf.split(self.NN(x_b), num_or_size_splits=2, axis=3)
-        log_s = tf.math.log(log_s)
-        s = tf.math.exp(log_s)
-        y_a = tf.math.multiply(s, x_a) + t
+            # split along the channels again? to get log_s and t
+            log_s, t = tf.split(self.NN(x_b), num_or_size_splits=2, axis=3)
+            log_s = tf.math.log(log_s)
+            s = tf.math.exp(log_s)
+            y_a = tf.math.multiply(s, x_a) + t
 
-        y_b = x_b
-        output = tf.concat((y_a, y_b), axis=3)
+            y_b = x_b
+            output = tf.concat((y_a, y_b), axis=3)
 
-        log_det = tf.math.reduce_sum(log_s)
+            log_det = tf.math.reduce_sum(log_s)
 
-        return output, log_det
+            return output, log_det
 
-    def reverse_call(self, inputs):
-        """
-        Computes the reverse calculations of the affine coupling layer
+        # the reverse calculations, if forward is False
+        else:
+            y_a, y_b = tf.split(inputs, num_or_size_splits=2, axis=3)
+            log_s, t = tf.split(self.NN(y_b), num_or_size_splits=2, axis=3)
+            log_s = tf.math.log(log_s)
+            s = tf.math.exp(log_s)
 
-        :param inputs: A tensor with assumed dimensions: (batch_size x height x width x channels)
-        :return: A tensor, same dimensions as input tensor, for a reverse step of flow
-        """
+            x_a = tf.math.divide((y_a - t), s)
+            x_b = y_b
+            output = tf.concat((x_a, x_b), axis=3)
 
-        y_a, y_b = tf.split(inputs, num_or_size_splits=2, axis=3)
-        log_s, t = tf.split(self.NN(y_b), num_or_size_splits=2, axis=3)
-        log_s = tf.math.log(log_s)
-        s = tf.math.exp(log_s)
-
-        x_a = tf.math.divide((y_a - t), s)
-        x_b = y_b
-        output = tf.concat((x_a, x_b), axis=3)
-
-        return output
+            return output
 
 ## Squeeze
 class Squeeze(Layer):
