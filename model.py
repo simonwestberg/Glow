@@ -34,23 +34,30 @@ class ActNorm(Layer):
     def __init__(self):
         super(ActNorm, self).__init__()
 
-    # Create the state of the layer (weights)
+    # Create the state of the layer. ActNorm initialization is done in call()
     def build(self, input_shape):
         b, h, w, c = input_shape    # Batch size, height, width, channels
 
-        # TODO: add data-dependant initialization
+        # Scale parameters per channel, called 's' in Glow
         self.scale = self.add_weight(
-            shape=(c, ),
-            initializer="random_normal",
-            trainable=True,
-        )
-        self.bias = self.add_weight(
-            shape=(c, ), 
-            initializer="random_normal", 
+            shape=(1, 1, 1, c),
             trainable=True
         )
 
-    # Defines the computation from inputs to outputs
+        # Bias parameter per channel, called 'b' in Glow
+        self.bias = self.add_weight(
+            shape=(1, 1, 1, c),
+            trainable=True
+        )
+
+        # Used to check if scale and bias have been initialized
+        self.initialized = self.add_weight(
+            trainable=False,
+            dtype=tf.bool
+        )
+
+        self.initialized.assign(False)
+
     def call(self, inputs, forward=True):
         """
         inputs: input tensor
@@ -58,13 +65,40 @@ class ActNorm(Layer):
         """
         b, h, w, c = inputs.shape    # Batch size, height, width, channels
 
+        if not self.initialized:
+            """
+            Given an initial batch X=inputs, setting 
+            scale = 1 / mean(X) and
+            bias = -mean(X) / std(X)
+            where mean and std is calculated per channel in X,
+            results in post-actnorm activations X = X*s + b having zero mean 
+            and unit variance per channel. 
+            """
+
+            assert(len(inputs.shape) == 4)
+
+            # Calculate mean per channel
+            mean = tf.math.reduce_mean(inputs, axis=[0, 1, 2], keepdims=True)
+
+            # Calculate standard deviation per channel
+            std = tf.math.reduce_std(inputs, axis=[0, 1, 2], keepdims=True)
+
+            # Add small value to std to avoid division by zero
+            eps = tf.constant(1e-6, shape=std.shape, dtype=std.dtype)
+            std = tf.math.add(std, eps)
+
+            self.scale.assign(tf.math.divide(1.0, std))
+            self.bias.assign(-tf.math.divide(mean, std))
+
+            self.initialized.assign(True)
+
         if forward:
             outputs = tf.math.multiply(inputs, self.scale) + self.bias
 
             # log-determinant of ActNorm layer in base 2
             log2_s = log(tf.math.abs(self.scale), base=2)
             logdet = h * w * tf.math.reduce_sum(log2_s)
-            
+
             # Loss for this layer is negative log-determinant
             self.add_loss(-logdet)
 
