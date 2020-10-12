@@ -246,7 +246,9 @@ class Split(Layer):
             else:
                 sample_shape = b, c
                 samples = Glow.latent_distribution.sample(sample_shape=sample_shape, seed=None, name='sample')
-                reverse_input = tf.reshape(samples, shape=(b, h, w, c))
+                reverse_z = tf.reshape(samples, shape=(b, h, w, c))
+
+                reverse_input = tf.concat((reverse_z, inputs), axis=3)
 
                 return reverse_input
 
