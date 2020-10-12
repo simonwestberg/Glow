@@ -219,7 +219,7 @@ class Split(Layer):
         super(Split, self).__init__()
 
     # Defines the computation from inputs to outputs
-    def call(self, inputs, forward=True):
+    def call(self, inputs, forward=True, last_layer=False):
         """
         inputs: input tensor
         returns: output tensor
@@ -231,9 +231,25 @@ class Split(Layer):
             x = inputs[:, :, :, c // 2:]
 
             return x, z
+
         else:
-            # TODO, reverse
-            return inputs, inputs
+            # should just sample with one colour channel, right?
+            # definitely not sure about the reshaping part
+            if last_layer:
+                sample_shape = b, 1
+                sample = Glow.latent_distribution.sample(sample_shape=sample_shape, seed=None, name='sample')
+                reverse_input = tf.reshape(sample, shape=(b, h, w, 1))
+
+                return reverse_input
+
+            # then for the other layers, it should sample the same number of channels as input channels... I think
+            else:
+                sample_shape = b, c
+                samples = Glow.latent_distribution.sample(sample_shape=sample_shape, seed=None, name='sample')
+                reverse_input = tf.reshape(samples, shape=(b, h, w, c))
+
+                return reverse_input
+
 
 ## Step of flow
 class FlowStep(Layer):
