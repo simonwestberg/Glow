@@ -95,9 +95,9 @@ class ActNorm(Layer):
             
             outputs = tf.math.multiply(inputs, self.scale) + self.bias
 
-            # log-determinant of ActNorm layer in base 2
-            log2_s = log(tf.math.abs(self.scale), base=2)
-            logdet = h * w * tf.math.reduce_sum(log2_s)
+            # log-determinant of ActNorm layer
+            log_s = tf.math.log(tf.math.abs(self.scale))
+            logdet = h * w * tf.math.reduce_sum(log_s)
 
             # Loss for this layer is negative log-determinant
             self.add_loss(-logdet)
@@ -174,7 +174,7 @@ class AffineCoupling(Layer):
             y_b = x_b
             output = tf.concat((y_a, y_b), axis=3)
 
-            log_det = log(tf.math.abs(s), base=2)
+            log_det = tf.math.log(tf.math.abs(s))
             log_det = tf.math.reduce_sum(log_det)
 
             self.add_loss(-log_det)
