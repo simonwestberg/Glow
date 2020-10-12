@@ -304,14 +304,19 @@ class FlowStep(Layer):
         self.coupling = AffineCoupling(hidden_channels)
 
     # Defines the computation from inputs to outputs
-    def call(self, inputs):
+    def call(self, inputs, forward=True):
         """
         inputs: input tensor
         returns: output tensor
         """
-        x = self.actnorm(inputs)
-        x = self.perm(x)
-        x = self.coupling(x)
+        if forward:
+            x = self.actnorm(inputs, forward)
+            x = self.perm(x, forward)
+            x = self.coupling(x, forward)
+        else:
+            x = self.coupling(inputs, forward)
+            x = self.perm(x, forward)
+            x = self.actnorm(x, forward)
 
         return x
 
@@ -350,8 +355,7 @@ class Glow(keras.Model):
             flows = []
 
             for k in range(steps):
-                flows.append([ActNorm(), Permutation(perm_type),
-                              AffineCoupling(hidden_channels)])
+                flows.append(FlowStep(hidden_channels, perm_type))
 
             self.flow_layers.append(flows)
 
@@ -365,29 +369,19 @@ class Glow(keras.Model):
 
             # K steps of flow
             for k in range(self.steps):
-                # ActNorm
-                x = self.flow_layers[l][k][0](x)
-                # Permutation
-                x = self.flow_layers[l][k][1](x)
-                # Affine coupling
-                x = self.flow_layers[l][k][2](x)
+                x = self.flow_layers[l][k](x)
 
             x, z = self.split(x)
 
             latent_dim = np.prod(z.shape[1:])  # Dimension of extracted z
             latent_variables.append(tf.reshape(z, [-1, latent_dim]))
 
-            # Last squeeze
+        # Last squeeze
         x = self.squeeze(x)
 
         # Last steps of flow
         for k in range(self.steps):
-            # ActNorm
-            x = self.flow_layers[-1][k][0](x)
-            # Permutation
-            x = self.flow_layers[-1][k][1](x)
-            # Affine coupling
-            x = self.flow_layers[-1][k][2](x)
+            x = self.flow_layers[-1][k](x)
 
         latent_dim = np.prod(x.shape[1:])  # Dimension of last latent variable
         latent_variables.append(tf.reshape(x, [-1, latent_dim]))
