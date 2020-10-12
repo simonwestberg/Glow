@@ -35,8 +35,12 @@ X_train, X_test = preprocess(X_train, X_test)
 X_train = np.expand_dims(X_train, axis=3)
 X_test = np.expand_dims(X_test, axis=3)
 
+# Add zero-padding to get 32x32 images
+X_train = np.pad(X_train, pad_width=((0, 0), (2, 2), (2, 2), (0, 0)))
+X_test = np.pad(X_test, pad_width=((0, 0), (2, 2), (2, 2), (0, 0)))
+
 # Train
-model = Glow(steps=3, levels=2, dimension=28*28*1, hidden_channels=128, perm_type="1x1")
+model = Glow(steps=3, levels=2, img_shape=(32, 32, 1), hidden_channels=128, perm_type="1x1")
 adam = keras.optimizers.Adam(learning_rate=1e-3)
 model.compile(optimizer=adam)
 
