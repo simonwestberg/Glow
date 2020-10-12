@@ -17,7 +17,6 @@ class MyLayer(Layer):
 
     # Create the state of the layer (weights)
     def build(self, input_shape):
-
         pass
 
     # Defines the computation from inputs to outputs
@@ -93,6 +92,7 @@ class ActNorm(Layer):
             self.initialized.assign(True)
 
         if forward:
+            
             outputs = tf.math.multiply(inputs, self.scale) + self.bias
 
             # log-determinant of ActNorm layer in base 2
@@ -129,29 +129,35 @@ class Permutation(Layer):
 ## Affine coupling
 class AffineCoupling(Layer):
 
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, hidden_channels):
         """
-
-        :param in_channels: Number of filters used for the hidden layers of the NN() function, see GLOW paper
-        :param out_channels: Number of filters/output channels from the last convolutional layer
-
+        :param hidden_channels: Number of filters used for the hidden layers of the NN() function, see GLOW paper
         """
         super(AffineCoupling, self).__init__()
 
         self.NN = tf.keras.Sequential()
-        self.NN.add(tf.keras.layers.Conv2D(in_channels, kernel_size=3,
-                                           activation='relu', strides=(1, 1), padding='same'))
-        self.NN.add(tf.keras.layers.Conv2D(in_channels, kernel_size=1,
-                                           activation='relu', strides=(1, 1), padding='same'))
-        self.NN.add(tf.keras.layers.Conv2D(out_channels, kernel_size=3,
-                                           activation='relu', strides=(1, 1), padding='same',
-                                           kernel_initializer=tf.keras.initializers.Zeros))
+        self.hidden_channels = hidden_channels
+
+    # Create the state of the layer (weights)
+    def build(self, input_shape):
+        b, h, w, c = input_shape
+
+        self.NN.add(tf.keras.layers.Conv2D(self.hidden_channels, kernel_size=3,
+                                           activation='relu', strides=(1, 1), 
+                                           padding='same'))
+        self.NN.add(tf.keras.layers.Conv2D(self.hidden_channels, kernel_size=1,
+                                           activation='relu', strides=(1, 1), 
+                                           padding='same'))
+        self.NN.add(tf.keras.layers.Conv2D(c, kernel_size=3,
+                                           activation='relu', strides=(1, 1), 
+                                           padding='same',
+                                           kernel_initializer=
+                                           tf.keras.initializers.Zeros))
 
     # Defines the computation from inputs to outputs
     def call(self, inputs, forward=True):
         """
         Computes the forward/reverse calculations of the affine coupling layer
-
         inputs: A tensor with assumed dimensions: (batch_size x height x width x channels)
         returns: A tensor, same dimensions as input tensor, for next step of flow and the scalar log determinant
         """
@@ -162,22 +168,23 @@ class AffineCoupling(Layer):
 
             # split along the channels again? to get log_s and t
             log_s, t = tf.split(self.NN(x_b), num_or_size_splits=2, axis=3)
-            log_s = tf.math.log(log_s)
             s = tf.math.exp(log_s)
             y_a = tf.math.multiply(s, x_a) + t
 
             y_b = x_b
             output = tf.concat((y_a, y_b), axis=3)
 
-            log_det = tf.math.reduce_sum(log_s)
+            log_det = log(tf.math.abs(s), base=2)
+            log_det = tf.math.reduce_sum(log_det)
 
-            return output, log_det
+            self.add_loss(-log_det)
+
+            return output
 
         # the reverse calculations, if forward is False
         else:
             y_a, y_b = tf.split(inputs, num_or_size_splits=2, axis=3)
             log_s, t = tf.split(self.NN(y_b), num_or_size_splits=2, axis=3)
-            log_s = tf.math.log(log_s)
             s = tf.math.exp(log_s)
 
             x_a = tf.math.divide((y_a - t), s)
@@ -186,7 +193,7 @@ class AffineCoupling(Layer):
 
             return output
 
-## Squeeze
+## Squeeze, no trainable parameters
 class Squeeze(Layer):
 
     def __init__(self):
@@ -198,7 +205,6 @@ class Squeeze(Layer):
         inputs: input tensor
         returns: output tensor
         """
-
         if forward:
             outputs = tf.nn.space_to_depth(inputs, block_size=2)
         else:
@@ -232,16 +238,13 @@ class Split(Layer):
 ## Step of flow
 class FlowStep(Layer):
 
-    def __init__(self):
+    def __init__(self, hidden_channels):
         super(FlowStep, self).__init__()
+        self.hidden_channels = hidden_channels
 
         self.actnorm = ActNorm()
         self.perm = Permutation()
-        self.coupling = AffineCoupling()
-
-    # Create the state of the layer (weights)
-    def build(self, input_shape):
-        pass
+        self.coupling = AffineCoupling(hidden_channels)
 
     # Defines the computation from inputs to outputs
     def call(self, inputs):
@@ -269,12 +272,13 @@ def log(x, base):
 
 class Glow(keras.Model):
 
-    def __init__(self, steps, levels, dimension):
+    def __init__(self, steps, levels, dimension, hidden_channels):
         super(Glow, self).__init__()
 
         self.steps = steps  # Number of steps in each flow, K in the paper
         self.levels = levels    # Number of levels, L in the paper
         self.dimension = dimension  # Dimension of input/latent space
+        self.hidden_channels = hidden_channels
 
         # Normal distribution with 0 mean and std=1, defined over R^dimension
         self.latent_distribution = tf_prob.distributions.MultivariateNormalDiag(
@@ -288,7 +292,7 @@ class Glow(keras.Model):
             flows = []
 
             for k in range(steps):
-                flows.append([ActNorm(), Permutation(), AffineCoupling()])
+                flows.append([ActNorm(), Permutation(), AffineCoupling(hidden_channels)])
 
             self.flow_layers.append(flows)
 
@@ -338,4 +342,3 @@ class Glow(keras.Model):
         self.add_loss(-latent_logprob)
 
         return latent_variables
-    
