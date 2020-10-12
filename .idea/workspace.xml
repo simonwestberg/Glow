@@ -19,7 +19,13 @@
     <select />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="182583ce-38e0-4368-b782-957fc6db5bee" name="Default Changelist" comment="" />
+    <list default="true" id="182583ce-38e0-4368-b782-957fc6db5bee" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/DD2412-Glow.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/DD2412-Glow.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/model.py" beforeDir="false" afterPath="$PROJECT_DIR$/model.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/train.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -43,7 +49,80 @@
   <component name="PropertiesComponent">
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
-    <property name="settings.editor.selected.configurable" value="vcs.Git" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/../KEX" />
+    <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
+  </component>
+  <component name="RunManager" selected="Python.model">
+    <configuration name="kladd" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="DD2412-Glow" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/kladd.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="main" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="DD2412-Glow" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/main.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="model" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="DD2412-Glow" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/model.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python.model" />
+        <item itemvalue="Python.main" />
+        <item itemvalue="Python.kladd" />
+      </list>
+    </recent_temporary>
   </component>
   <component name="SvnConfiguration">
     <configuration />
@@ -63,24 +142,56 @@
       <map>
         <entry key="MAIN">
           <value>
-            <State />
+            <State>
+              <option name="COLUMN_ORDER" />
+            </State>
           </value>
         </entry>
       </map>
     </option>
   </component>
   <component name="WindowStateProjectService">
-    <state x="740" y="275" key="FileChooserDialogImpl" timestamp="1601641136048">
-      <screen x="0" y="0" width="1920" height="1040" />
+    <state x="356" y="0" key="CommitChangelistDialog2" timestamp="1602513776055">
+      <screen x="0" y="0" width="1536" height="824" />
     </state>
+    <state x="356" y="0" key="CommitChangelistDialog2/0.0.1536.824@0.0.1536.824" timestamp="1602513776055" />
+    <state x="93" y="93" width="1350" height="638" maximized="true" key="DiffContextDialog" timestamp="1602513548336">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="93" y="93" width="1350" height="638" maximized="true" key="DiffContextDialog/0.0.1536.824@0.0.1536.824" timestamp="1602513548336" />
+    <state x="592" y="218" key="FileChooserDialogImpl" timestamp="1601899394908">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="592" y="218" key="FileChooserDialogImpl/0.0.1536.824@0.0.1536.824" timestamp="1601899394908" />
     <state x="740" y="275" key="FileChooserDialogImpl/0.0.1920.1040@0.0.1920.1040" timestamp="1601641136048" />
-    <state x="483" y="165" key="SettingsEditor" timestamp="1601641230018">
-      <screen x="0" y="0" width="1920" height="1040" />
+    <state width="1509" height="123" key="GridCell.Tab.0.bottom" timestamp="1602513013395">
+      <screen x="0" y="0" width="1536" height="824" />
     </state>
+    <state width="1509" height="123" key="GridCell.Tab.0.bottom/0.0.1536.824@0.0.1536.824" timestamp="1602513013395" />
+    <state width="1509" height="123" key="GridCell.Tab.0.center" timestamp="1602513013395">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state width="1509" height="123" key="GridCell.Tab.0.center/0.0.1536.824@0.0.1536.824" timestamp="1602513013395" />
+    <state width="1509" height="123" key="GridCell.Tab.0.left" timestamp="1602513013395">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state width="1509" height="123" key="GridCell.Tab.0.left/0.0.1536.824@0.0.1536.824" timestamp="1602513013395" />
+    <state width="1509" height="123" key="GridCell.Tab.0.right" timestamp="1602513013395">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state width="1509" height="123" key="GridCell.Tab.0.right/0.0.1536.824@0.0.1536.824" timestamp="1602513013395" />
+    <state x="323" y="0" key="SettingsEditor" timestamp="1602512576200">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="323" y="0" key="SettingsEditor/0.0.1536.824@0.0.1536.824" timestamp="1602512576200" />
     <state x="483" y="165" key="SettingsEditor/0.0.1920.1040@0.0.1920.1040" timestamp="1601641230018" />
     <state x="769" y="434" key="com.intellij.openapi.vcs.update.UpdateOrStatusOptionsDialogupdate-v2" timestamp="1601640787894">
       <screen x="0" y="0" width="1920" height="1040" />
     </state>
     <state x="769" y="434" key="com.intellij.openapi.vcs.update.UpdateOrStatusOptionsDialogupdate-v2/0.0.1920.1040@0.0.1920.1040" timestamp="1601640787894" />
+    <state x="427" y="158" key="git4idea.merge.GitPullDialog" timestamp="1602512624255">
+      <screen x="0" y="0" width="1536" height="824" />
+    </state>
+    <state x="427" y="158" key="git4idea.merge.GitPullDialog/0.0.1536.824@0.0.1536.824" timestamp="1602512624255" />
   </component>
 </project>

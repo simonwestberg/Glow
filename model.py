@@ -111,20 +111,59 @@ class ActNorm(Layer):
 ## Permutation (1x1 convolution, reverse, or shuffle)
 class Permutation(Layer):
 
-    def __init__(self):
+    def __init__(self, perm_type="1x1"):
         super(Permutation, self).__init__()
+
+        self.types = ["1x1", "reverse", "shuffle"]
+        self.perm_type = perm_type
+
+        if perm_type not in self.types:
+            raise ValueError("Incorrect permutation type, should be either "
+                             "'1x1', 'reverse', or 'shuffle'")
 
     # Create the state of the layer (weights)
     def build(self, input_shape):
-        pass
+        b, h, w, c = input_shape
+
+        if self.perm_type == "1x1":
+            self.W = self.add_weight(
+                shape=(1, 1, c, c),
+                trainable=True,
+                initializer=tf.keras.initializers.orthogonal
+            )
 
     # Defines the computation from inputs to outputs
-    def call(self, inputs):
+    def call(self, inputs, forward=True):
         """
         inputs: input tensor
         returns: output tensor
         """
-        return inputs
+
+        b, h, w, c = inputs.shape
+
+        if forward:
+            if self.perm_type == "1x1":
+                outputs = tf.nn.conv2d(inputs,
+                                       self.W,
+                                       strides=[1, 1, 1, 1],
+                                       padding="SAME")
+
+                # Log-determinant
+                det = tf.math.reduce_sum(tf.linalg.det(self.W))
+                log_det = h * w * tf.math.log(tf.math.abs(det))
+                self.add_loss(-log_det)
+
+                return outputs
+
+        else:
+            if self.perm_type == "1x1":
+                W_inv = tf.linalg.inv(self.W)
+                outputs = tf.nn.conv2d(inputs,
+                                       W_inv,
+                                       strides=[1, 1, 1, 1],
+                                       padding="SAME")
+
+                return outputs
 
 ## Affine coupling
 class AffineCoupling(Layer):
@@ -256,12 +295,12 @@ class Split(Layer):
 ## Step of flow
 class FlowStep(Layer):
 
-    def __init__(self, hidden_channels):
+    def __init__(self, hidden_channels, perm_type="1x1"):
         super(FlowStep, self).__init__()
         self.hidden_channels = hidden_channels
 
         self.actnorm = ActNorm()
-        self.perm = Permutation()
+        self.perm = Permutation(perm_type)
         self.coupling = AffineCoupling(hidden_channels)
 
     # Defines the computation from inputs to outputs
@@ -290,17 +329,18 @@ def log(x, base):
 
 class Glow(keras.Model):
 
-    def __init__(self, steps, levels, dimension, hidden_channels):
+    def __init__(self, steps, levels, dimension, hidden_channels, perm_type="1x1"):
         super(Glow, self).__init__()
 
         self.steps = steps  # Number of steps in each flow, K in the paper
-        self.levels = levels    # Number of levels, L in the paper
+        self.levels = levels  # Number of levels, L in the paper
         self.dimension = dimension  # Dimension of input/latent space
         self.hidden_channels = hidden_channels
+        self.perm_type = perm_type
 
         # Normal distribution with 0 mean and std=1, defined over R^dimension
         self.latent_distribution = tf_prob.distributions.MultivariateNormalDiag(
-            loc=[0.0]*dimension)
+            loc=[0.0] * dimension)
 
         self.squeeze = Squeeze()
         self.split = Split()
@@ -310,16 +350,17 @@ class Glow(keras.Model):
             flows = []
 
             for k in range(steps):
-                flows.append([ActNorm(), Permutation(), AffineCoupling(hidden_channels)])
+                flows.append([ActNorm(), Permutation(perm_type),
+                              AffineCoupling(hidden_channels)])
 
             self.flow_layers.append(flows)
 
     def call(self, inputs):
         x = inputs
         latent_variables = []
-        
+
         for l in range(self.levels - 1):
-            
+
             x = self.squeeze(x)
 
             # K steps of flow
@@ -330,15 +371,15 @@ class Glow(keras.Model):
                 x = self.flow_layers[l][k][1](x)
                 # Affine coupling
                 x = self.flow_layers[l][k][2](x)
-            
+
             x, z = self.split(x)
 
-            latent_dim = np.prod(z.shape[1:])   # Dimension of extracted z
-            latent_variables.append(tf.reshape(z, [-1, latent_dim])) 
-        
-        # Last squeeze
+            latent_dim = np.prod(z.shape[1:])  # Dimension of extracted z
+            latent_variables.append(tf.reshape(z, [-1, latent_dim]))
+
+            # Last squeeze
         x = self.squeeze(x)
-        
+
         # Last steps of flow
         for k in range(self.steps):
             # ActNorm
@@ -347,9 +388,9 @@ class Glow(keras.Model):
             x = self.flow_layers[-1][k][1](x)
             # Affine coupling
             x = self.flow_layers[-1][k][2](x)
-        
-        latent_dim = np.prod(x.shape[1:])   # Dimension of last latent variable
-        latent_variables.append(tf.reshape(x, [-1, latent_dim]))         
+
+        latent_dim = np.prod(x.shape[1:])  # Dimension of last latent variable
+        latent_variables.append(tf.reshape(x, [-1, latent_dim]))
 
         # Concatenate latent variables
         latent_variables = tf.concat(latent_variables, axis=1)
