@@ -35,7 +35,7 @@ class ActNorm(Layer):
 
     # Create the state of the layer. ActNorm initialization is done in call()
     def build(self, input_shape):
-        b, h, w, c = input_shape    # Batch size, height, width, channels
+        b, h, w, c = input_shape[0]    # Batch size, height, width, channels
 
         # Scale parameters per channel, called 's' in Glow
         self.scale = self.add_weight(
@@ -59,14 +59,18 @@ class ActNorm(Layer):
 
     def call(self, inputs, forward=True):
         """
-        inputs: input tensor
+        inputs: list containing [input tensor, log_det]
         returns: output tensor
         """
-        b, h, w, c = inputs.shape    # Batch size, height, width, channels
+
+        x = inputs[0]
+        log_det = inputs[1]
+
+        b, h, w, c = x.shape  # Batch size, height, width, channels
 
         if not self.initialized:
             """
-            Given an initial batch X=inputs, setting 
+            Given an initial batch X, setting 
             scale = 1 / mean(X) and
             bias = -mean(X) / std(X)
             where mean and std is calculated per channel in X,
@@ -74,13 +78,13 @@ class ActNorm(Layer):
             and unit variance per channel. 
             """
 
-            assert(len(inputs.shape) == 4)
+            assert(len(x.shape) == 4)
 
             # Calculate mean per channel
-            mean = tf.math.reduce_mean(inputs, axis=[0, 1, 2], keepdims=True)
+            mean = tf.math.reduce_mean(x, axis=[0, 1, 2], keepdims=True)
 
             # Calculate standard deviation per channel
-            std = tf.math.reduce_std(inputs, axis=[0, 1, 2], keepdims=True)
+            std = tf.math.reduce_std(x, axis=[0, 1, 2], keepdims=True)
 
             # Add small value to std to avoid division by zero
             eps = tf.constant(1e-6, shape=std.shape, dtype=std.dtype)
@@ -92,21 +96,19 @@ class ActNorm(Layer):
             self.initialized.assign(True)
 
         if forward:
-            
-            outputs = tf.math.multiply(inputs, self.scale) + self.bias
+
+            outputs = tf.math.multiply(x, self.scale) + self.bias
 
             # log-determinant of ActNorm layer
             log_s = tf.math.log(tf.math.abs(self.scale))
-            logdet = h * w * tf.math.reduce_sum(log_s)
+            log_det += h * w * tf.math.reduce_sum(log_s)
 
-            # Loss for this layer is negative log-determinant
-            self.add_loss(-logdet)
+            return outputs, log_det
 
         else:
             # Reverse operation
-            outputs = (inputs - self.bias) / self.scale 
-        
-        return outputs
+            outputs = (x - self.bias) / self.scale
+            return outputs
 
 ## Permutation (1x1 convolution, reverse, or shuffle)
 class Permutation(Layer):
@@ -123,7 +125,7 @@ class Permutation(Layer):
 
     # Create the state of the layer (weights)
     def build(self, input_shape):
-        b, h, w, c = input_shape
+        b, h, w, c = input_shape[0]
 
         if self.perm_type == "1x1":
             self.W = self.add_weight(
@@ -135,30 +137,32 @@ class Permutation(Layer):
     # Defines the computation from inputs to outputs
     def call(self, inputs, forward=True):
         """
-        inputs: input tensor
+        inputs: input tensor or list containing [input tensor, log_det]
         returns: output tensor
         """
 
-        b, h, w, c = inputs.shape
+        x = inputs[0]
+        log_det = inputs[1]
+
+        b, h, w, c = x.shape
 
         if forward:
             if self.perm_type == "1x1":
-                outputs = tf.nn.conv2d(inputs,
+                outputs = tf.nn.conv2d(x,
                                        self.W,
                                        strides=[1, 1, 1, 1],
                                        padding="SAME")
 
                 # Log-determinant
                 det = tf.math.reduce_sum(tf.linalg.det(self.W))
-                log_det = h * w * tf.math.log(tf.math.abs(det))
-                self.add_loss(-log_det)
+                log_det += h * w * tf.math.log(tf.math.abs(det))
 
-                return outputs
+                return outputs, log_det
 
         else:
             if self.perm_type == "1x1":
                 W_inv = tf.linalg.inv(self.W)
-                outputs = tf.nn.conv2d(inputs,
+                outputs = tf.nn.conv2d(x,
                                        W_inv,
                                        strides=[1, 1, 1, 1],
                                        padding="SAME")
@@ -179,16 +183,16 @@ class AffineCoupling(Layer):
 
     # Create the state of the layer (weights)
     def build(self, input_shape):
-        b, h, w, c = input_shape
+        b, h, w, c = input_shape[0]
 
         self.NN.add(tf.keras.layers.Conv2D(self.hidden_channels, kernel_size=3,
-                                           activation='relu', strides=(1, 1), 
+                                           activation='relu', strides=(1, 1),
                                            padding='same'))
         self.NN.add(tf.keras.layers.Conv2D(self.hidden_channels, kernel_size=1,
-                                           activation='relu', strides=(1, 1), 
+                                           activation='relu', strides=(1, 1),
                                            padding='same'))
         self.NN.add(tf.keras.layers.Conv2D(c, kernel_size=3,
-                                           activation='relu', strides=(1, 1), 
+                                           activation='relu', strides=(1, 1),
                                            padding='same',
                                            kernel_initializer=
                                            tf.keras.initializers.Zeros))
@@ -197,13 +201,16 @@ class AffineCoupling(Layer):
     def call(self, inputs, forward=True):
         """
         Computes the forward/reverse calculations of the affine coupling layer
-        inputs: A tensor with assumed dimensions: (batch_size x height x width x channels)
+        inputs: list containing [input tensor, log_det]
         returns: A tensor, same dimensions as input tensor, for next step of flow and the scalar log determinant
         """
 
+        x = inputs[0]
+        log_det = inputs[1]
+
         if forward:
             # split along the channels, which is axis=3
-            x_a, x_b = tf.split(inputs, num_or_size_splits=2, axis=3)
+            x_a, x_b = tf.split(x, num_or_size_splits=2, axis=3)
 
             # split along the channels again? to get log_s and t
             log_s, t = tf.split(self.NN(x_b), num_or_size_splits=2, axis=3)
@@ -213,16 +220,14 @@ class AffineCoupling(Layer):
             y_b = x_b
             output = tf.concat((y_a, y_b), axis=3)
 
-            log_det = tf.math.log(tf.math.abs(s))
-            log_det = tf.math.reduce_sum(log_det)
+            _log_det = tf.math.log(tf.math.abs(s))
+            log_det += tf.math.reduce_sum(_log_det)
 
-            self.add_loss(-log_det)
-
-            return output
+            return output, log_det
 
         # the reverse calculations, if forward is False
         else:
-            y_a, y_b = tf.split(inputs, num_or_size_splits=2, axis=3)
+            y_a, y_b = tf.split(x, num_or_size_splits=2, axis=3)
             log_s, t = tf.split(self.NN(y_b), num_or_size_splits=2, axis=3)
             s = tf.math.exp(log_s)
 
@@ -306,19 +311,23 @@ class FlowStep(Layer):
     # Defines the computation from inputs to outputs
     def call(self, inputs, forward=True):
         """
-        inputs: input tensor
+        inputs: list containing [input tensor, log_det]
         returns: output tensor
         """
-        if forward:
-            x = self.actnorm(inputs, forward)
-            x = self.perm(x, forward)
-            x = self.coupling(x, forward)
-        else:
-            x = self.coupling(inputs, forward)
-            x = self.perm(x, forward)
-            x = self.actnorm(x, forward)
 
-        return x
+        x = inputs[0]
+        log_det = inputs[1]
+
+        if forward:
+            x, log_det = self.actnorm([x, log_det], forward)
+            x, log_det = self.perm([x, log_det], forward)
+            x, log_det = self.coupling([x, log_det], forward)
+        else:
+            x, log_det = self.coupling([x, log_det], forward)
+            x, log_det = self.perm([x, log_det], forward)
+            x, log_det = self.actnorm([x, log_det], forward)
+
+        return x, log_det
 
 def log(x, base):
     """
@@ -362,6 +371,7 @@ class Glow(keras.Model):
     def call(self, inputs):
         x = inputs
         latent_variables = []
+        log_det = 0.0
 
         for l in range(self.levels - 1):
 
@@ -369,7 +379,7 @@ class Glow(keras.Model):
 
             # K steps of flow
             for k in range(self.steps):
-                x = self.flow_layers[l][k](x)
+                x, log_det = self.flow_layers[l][k]([x, log_det])
 
             x, z = self.split(x)
 
@@ -381,7 +391,7 @@ class Glow(keras.Model):
 
         # Last steps of flow
         for k in range(self.steps):
-            x = self.flow_layers[-1][k](x)
+            x, log_det = self.flow_layers[-1][k]([x, log_det])
 
         latent_dim = np.prod(x.shape[1:])  # Dimension of last latent variable
         latent_variables.append(tf.reshape(x, [-1, latent_dim]))
@@ -392,6 +402,6 @@ class Glow(keras.Model):
         latent_logprob = self.latent_distribution.log_prob(latent_variables)
         latent_logprob = tf.reduce_mean(latent_logprob)
 
-        self.add_loss(-latent_logprob)
+        self.add_loss(-latent_logprob - log_det)
 
         return latent_variables
