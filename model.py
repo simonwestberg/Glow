@@ -179,7 +179,7 @@ class Permutation(Layer):
                 return output, log_det
 
             elif self.perm_type == "shuffle":
-                permuted_output = tf.gather(inputs, self.indices, axis=3)
+                permuted_output = tf.gather(x, self.indices, axis=3)
                 log_det += 0
 
                 return permuted_output, log_det
@@ -206,7 +206,7 @@ class Permutation(Layer):
                 return outputs, log_det
 
             elif self.perm_type == "shuffle":
-                reverse_permute_output = tf.gather(inputs, self.reverse_indicies, axis=3)
+                reverse_permute_output = tf.gather(x, self.reverse_indicies, axis=3)
                 
                 log_det -= 0
                 
