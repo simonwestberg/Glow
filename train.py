@@ -45,3 +45,14 @@ adam = keras.optimizers.Adam(learning_rate=1e-3)
 model.compile(optimizer=adam)
 
 model.fit(X_train, epochs=2, batch_size=128)
+
+# Encoding and sampling
+
+# Encode x
+x = X_train[0, :, :, :].reshape((1, 32, 32, 1))
+z, log_det = model(x, forward=True)
+
+# Sample z and decode to generate image
+z = model.latent_distribution.sample()
+
+x, log_det = model(z, forward=False)
