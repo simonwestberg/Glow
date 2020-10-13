@@ -154,8 +154,6 @@ class Permutation(Layer):
         b, h, w, c = x.shape
 
         reverse_indices = [0]*c
-        rng_seed = abs(hash('shuffle')) % 10000000
-        n_channels = c
 
         if forward:
             if self.perm_type == "1x1":
@@ -177,6 +175,8 @@ class Permutation(Layer):
                 return output, log_det
 
             elif self.perm_type == "shuffle":
+                rng_seed = abs(hash('shuffle')) % 10000000
+                n_channels = c
                 indices = np.arange(n_channels)
                 shuffled_indices = np.random.RandomState(seed=rng_seed).permutation(indices)
                 permuted_tensor = tf.gather(inputs, shuffled_indices, axis=3)
