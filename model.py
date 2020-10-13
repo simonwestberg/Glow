@@ -382,8 +382,6 @@ class Glow(keras.Model):
             return latent_variables, log_det
 
         else:
-            ##### Needs debugging, gets dimension error in AffineCoupling layer now
-
             # Run the model backwards, assuming that inputs is a sampled latent variable of full dimension
             assert (inputs.shape == self.dimension)
 
