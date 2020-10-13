@@ -108,7 +108,11 @@ class ActNorm(Layer):
         else:
             # Reverse operation
             outputs = (x - self.bias) / self.scale
-            return outputs
+
+            # log-determinant of ActNorm layer
+            log_s = tf.math.log(tf.math.abs(self.scale))
+            log_det -= h * w * tf.math.reduce_sum(log_s)
+            return outputs, log_det
 
 ## Permutation (1x1 convolution, reverse, or shuffle)
 class Permutation(Layer):
@@ -167,7 +171,11 @@ class Permutation(Layer):
                                        strides=[1, 1, 1, 1],
                                        padding="SAME")
 
-                return outputs
+                # Log-determinant
+                det = tf.math.reduce_sum(tf.linalg.det(self.W))
+                log_det -= h * w * tf.math.log(tf.math.abs(det))
+
+                return outputs, log_det
 
 ## Affine coupling
 class AffineCoupling(Layer):
@@ -235,7 +243,10 @@ class AffineCoupling(Layer):
             x_b = y_b
             output = tf.concat((x_a, x_b), axis=3)
 
-            return output
+            _log_det = tf.math.log(tf.math.abs(s))
+            log_det -= tf.math.reduce_sum(_log_det)
+
+            return output, log_det
 
 ## Squeeze, no trainable parameters
 class Squeeze(Layer):
@@ -393,8 +404,10 @@ class Glow(keras.Model):
 
             # Extract last latent variable and reshape
             z = latent_variables[-1]
-            w = int(np.sqrt(len(z)))
-            z = tf.reshape(z, shape=(1, w, w, self.channels))
+            c_last = self.channels * 2 ** (self.levels + 1)     # nr of channels in the last latent output
+            h_last = self.height // (2 ** self.levels)  # height of the last latent output
+            w_last = self.width // (2 ** self.levels)   # width of the last latent output
+            z = tf.reshape(z, shape=(1, h_last, w_last, c_last))
 
             # Last steps of flow
             for k in reversed(range(self.steps)):
