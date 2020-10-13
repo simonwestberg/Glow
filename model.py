@@ -179,13 +179,13 @@ class Permutation(Layer):
                 n_channels = c
                 indices = np.arange(n_channels)
                 shuffled_indices = np.random.RandomState(seed=rng_seed).permutation(indices)
-                permuted_tensor = tf.gather(inputs, shuffled_indices, axis=3)
+                permuted_output = tf.gather(inputs, shuffled_indices, axis=3)
 
                 for i in range(n_channels):
                     reverse_indices[shuffled_indices[i]] = i
 
                 log_det = 0
-                return permuted_tensor, log_det
+                return permuted_output, log_det
 
         else:
             if self.perm_type == "1x1":
@@ -203,9 +203,9 @@ class Permutation(Layer):
                 return outputs
 
             elif self.perm_type == "shuffle":
-                reverse_permutation = tf.gather(inputs, reverse_indices, axis=3)
+                reverse_permute_output = tf.gather(inputs, reverse_indices, axis=3)
 
-                return reverse_permutation
+                return reverse_permute_output
 
 
 ## Affine coupling
