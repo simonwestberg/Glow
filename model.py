@@ -200,13 +200,17 @@ class Permutation(Layer):
 
             elif self.perm_type == "reverse":
                 outputs = x[:, :, :, ::-1]
+                
+                log_det -= 0
 
-                return outputs
+                return outputs, log_det
 
             elif self.perm_type == "shuffle":
                 reverse_permute_output = tf.gather(inputs, self.reverse_indicies, axis=3)
-
-                return reverse_permute_output
+                
+                log_det -= 0
+                
+                return reverse_permute_output, log_det
 
 
 ## Affine coupling
