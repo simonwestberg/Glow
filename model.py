@@ -108,7 +108,11 @@ class ActNorm(Layer):
         else:
             # Reverse operation
             outputs = (x - self.bias) / self.scale
-            return outputs
+
+            # log-determinant of ActNorm layer
+            log_s = tf.math.log(tf.math.abs(self.scale))
+            log_det -= h * w * tf.math.reduce_sum(log_s)
+            return outputs, log_det
 
 ## Permutation (1x1 convolution, reverse, or shuffle)
 class Permutation(Layer):
@@ -195,7 +199,11 @@ class Permutation(Layer):
                                        strides=[1, 1, 1, 1],
                                        padding="SAME")
 
-                return outputs
+                # Log-determinant
+                det = tf.math.reduce_sum(tf.linalg.det(self.W))
+                log_det -= h * w * tf.math.log(tf.math.abs(det))
+
+                return outputs, log_det
 
             elif self.perm_type == "reverse":
                 outputs = inputs[:, :, :, ::-1]
@@ -274,7 +282,10 @@ class AffineCoupling(Layer):
             x_b = y_b
             output = tf.concat((x_a, x_b), axis=3)
 
-            return output
+            _log_det = tf.math.log(tf.math.abs(s))
+            log_det -= tf.math.reduce_sum(_log_det)
+
+            return output, log_det
 
 ## Squeeze, no trainable parameters
 class Squeeze(Layer):
@@ -294,47 +305,6 @@ class Squeeze(Layer):
             outputs = tf.nn.depth_to_space(inputs, block_size=2)
 
         return outputs
-
-## Split, what the hell do they do in https://github.com/openai/glow ???
-class Split(Layer):
-
-    def __init__(self):
-        super(Split, self).__init__()
-
-    # Defines the computation from inputs to outputs
-    def call(self, inputs, forward=True, last_layer=False):
-        """
-        inputs: input tensor
-        returns: output tensor
-        """
-        b, h, w, c = inputs.shape   # Batch size, height, width, channels
-
-        if forward:
-            z = inputs[:, :, :, 0:c // 2]
-            x = inputs[:, :, :, c // 2:]
-
-            return x, z
-
-        else:
-            # should just sample with one colour channel, right?
-            # definitely not sure about the reshaping part
-            if last_layer:
-                sample_shape = b, 1
-                sample = Glow.latent_distribution.sample(sample_shape=sample_shape, seed=None, name='sample')
-                reverse_input = tf.reshape(sample, shape=(b, h, w, 1))
-
-                return reverse_input
-
-            # then for the other layers, it should sample the same number of channels as input channels... I think
-            else:
-                sample_shape = b, c
-                samples = Glow.latent_distribution.sample(sample_shape=sample_shape, seed=None, name='sample')
-                reverse_z = tf.reshape(samples, shape=(b, h, w, c))
-
-                reverse_input = tf.concat((reverse_z, inputs), axis=3)
-
-                return reverse_input
-
 
 ## Step of flow
 class FlowStep(Layer):
@@ -382,21 +352,23 @@ def log(x, base):
 
 class Glow(keras.Model):
 
-    def __init__(self, steps, levels, dimension, hidden_channels, perm_type="1x1"):
+    def __init__(self, steps, levels, img_shape, hidden_channels, perm_type="1x1"):
         super(Glow, self).__init__()
+
+        assert (len(img_shape) == 3)
 
         self.steps = steps  # Number of steps in each flow, K in the paper
         self.levels = levels  # Number of levels, L in the paper
-        self.dimension = dimension  # Dimension of input/latent space
+        self.height, self.width, self.channels = img_shape
+        self.dimension = self.height * self.width * self.channels   # Dimension of input/latent space
         self.hidden_channels = hidden_channels
         self.perm_type = perm_type
 
         # Normal distribution with 0 mean and std=1, defined over R^dimension
         self.latent_distribution = tf_prob.distributions.MultivariateNormalDiag(
-            loc=[0.0] * dimension)
+            loc=[0.0] * self.dimension)
 
         self.squeeze = Squeeze()
-        self.split = Split()
         self.flow_layers = []
 
         for l in range(levels):
@@ -407,40 +379,91 @@ class Glow(keras.Model):
 
             self.flow_layers.append(flows)
 
-    def call(self, inputs):
-        x = inputs
-        latent_variables = []
-        log_det = 0.0
+    def call(self, inputs, forward=True):
 
-        for l in range(self.levels - 1):
+        if forward:
+            x = inputs
+            latent_variables = []
+            log_det = 0.0
 
-            x = self.squeeze(x)
+            for l in range(self.levels - 1):
 
-            # K steps of flow
+                x = self.squeeze(x, forward=forward)
+
+                # K steps of flow
+                for k in range(self.steps):
+                    x, log_det = self.flow_layers[l][k]([x, log_det], forward=forward)
+
+                # Split into two parts along channel dimension
+                z, x = tf.split(x, num_or_size_splits=2, axis=3)
+
+                latent_dim = np.prod(z.shape[1:])  # Dimension of extracted z
+                latent_variables.append(tf.reshape(z, [-1, latent_dim]))
+
+            # Last squeeze
+            x = self.squeeze(x, forward=forward)
+
+            # Last steps of flow
             for k in range(self.steps):
-                x, log_det = self.flow_layers[l][k]([x, log_det])
+                x, log_det = self.flow_layers[-1][k]([x, log_det], forward=forward)
 
-            x, z = self.split(x)
+            latent_dim = np.prod(x.shape[1:])  # Dimension of last latent variable
+            latent_variables.append(tf.reshape(x, [-1, latent_dim]))
 
-            latent_dim = np.prod(z.shape[1:])  # Dimension of extracted z
-            latent_variables.append(tf.reshape(z, [-1, latent_dim]))
+            # Concatenate latent variables
+            latent_variables = tf.concat(latent_variables, axis=1)
 
-        # Last squeeze
-        x = self.squeeze(x)
+            latent_logprob = self.latent_distribution.log_prob(latent_variables)
+            latent_logprob = tf.reduce_mean(latent_logprob)
 
-        # Last steps of flow
-        for k in range(self.steps):
-            x, log_det = self.flow_layers[-1][k]([x, log_det])
+            self.add_loss(-latent_logprob - log_det)
 
-        latent_dim = np.prod(x.shape[1:])  # Dimension of last latent variable
-        latent_variables.append(tf.reshape(x, [-1, latent_dim]))
+            return latent_variables, log_det
 
-        # Concatenate latent variables
-        latent_variables = tf.concat(latent_variables, axis=1)
+        else:
+            # Run the model backwards, assuming that inputs is a sampled latent variable of full dimension
+            assert (inputs.shape == self.dimension)
 
-        latent_logprob = self.latent_distribution.log_prob(latent_variables)
-        latent_logprob = tf.reduce_mean(latent_logprob)
+            # Extract slices of the latent variables to be used in reverse split function
+            latent_variables = []
 
-        self.add_loss(-latent_logprob - log_det)
+            start = 0   # Starting index of the slice for z_i
+            stop = 0    # Stopping index of the slice for z_i
 
-        return latent_variables
+            for l in range(self.levels - 1):
+                stop += self.dimension // (2 ** (l + 1))
+                latent_variables.append(inputs[start:stop])
+                start = stop
+
+            latent_variables.append(inputs[start:])
+
+            log_det = 0.0
+
+            # Extract last latent variable and reshape
+            z = latent_variables[-1]
+            c_last = self.channels * 2 ** (self.levels + 1)     # nr of channels in the last latent output
+            h_last = self.height // (2 ** self.levels)  # height of the last latent output
+            w_last = self.width // (2 ** self.levels)   # width of the last latent output
+            z = tf.reshape(z, shape=(1, h_last, w_last, c_last))
+
+            # Last steps of flow
+            for k in reversed(range(self.steps)):
+                z, log_det = self.flow_layers[-1][k]([z, log_det], forward=forward)
+
+            # Last squeeze
+            z = self.squeeze(z, forward=forward)
+
+            for l in reversed(range(self.levels - 1)):
+
+                # Extract latent variable, reshape, and concatenate along channel dimension (reverse split)
+                z_add = latent_variables[l]
+                z_add = tf.reshape(z_add, shape=z.shape)
+                z = tf.concat([z_add, z], axis=3)
+
+                # K steps of flow
+                for k in reversed(range(self.steps)):
+                    z, log_det = self.flow_layers[l][k]([z, log_det], forward=forward)
+
+                z = self.squeeze(z, forward=forward)
+
+            return z, log_det
