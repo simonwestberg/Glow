@@ -133,6 +133,13 @@ class Permutation(Layer):
                 trainable=True,
                 initializer=tf.keras.initializers.orthogonal
             )
+        elif self.perm_type == "reverse":
+            # assume we don't need to build a matrix W for these methods?
+            pass
+
+        elif self.perm_type == "shuffle":
+            # assume we don't need to build a matrix W for these methods?
+            pass
 
     # Defines the computation from inputs to outputs
     def call(self, inputs, forward=True):
@@ -145,6 +152,10 @@ class Permutation(Layer):
         log_det = inputs[1]
 
         b, h, w, c = x.shape
+
+        reverse_indices = [0]*c
+        rng_seed = abs(hash('shuffle')) % 10000000
+        n_channels = c
 
         if forward:
             if self.perm_type == "1x1":
@@ -159,6 +170,23 @@ class Permutation(Layer):
 
                 return outputs, log_det
 
+            elif self.perm_type == "reverse":
+                output = inputs[:, :, :, ::-1]
+                log_det = 0
+
+                return output, log_det
+
+            elif self.perm_type == "shuffle":
+                indices = np.arange(n_channels)
+                shuffled_indices = np.random.RandomState(seed=rng_seed).permutation(indices)
+                permuted_tensor = tf.gather(inputs, shuffled_indices, axis=3)
+
+                for i in range(n_channels):
+                    reverse_indices[shuffled_indices[i]] = i
+
+                log_det = 0
+                return permuted_tensor, log_det
+
         else:
             if self.perm_type == "1x1":
                 W_inv = tf.linalg.inv(self.W)
@@ -168,6 +196,17 @@ class Permutation(Layer):
                                        padding="SAME")
 
                 return outputs
+
+            elif self.perm_type == "reverse":
+                outputs = inputs[:, :, :, ::-1]
+
+                return outputs
+
+            elif self.perm_type == "shuffle":
+                reverse_permutation = tf.gather(inputs, reverse_indices, axis=3)
+
+                return reverse_permutation
+
 
 ## Affine coupling
 class AffineCoupling(Layer):
