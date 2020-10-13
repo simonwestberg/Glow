@@ -138,12 +138,14 @@ class Permutation(Layer):
                 initializer=tf.keras.initializers.orthogonal
             )
         elif self.perm_type == "reverse":
-            # assume we don't need to build a matrix W for these methods?
             pass
 
         elif self.perm_type == "shuffle":
-            # assume we don't need to build a matrix W for these methods?
-            pass
+            rng_seed = abs(hash(self.perm_type)) % 10000000
+            self.indices = np.random.RandomState(seed=rng_seed).permutation(np.arange(c))
+            self.reverse_indicies = [0]*c
+            for i in range(c):
+                self.reverse_indicies[self.indices[i]] = i
 
     # Defines the computation from inputs to outputs
     def call(self, inputs, forward=True):
@@ -156,8 +158,6 @@ class Permutation(Layer):
         log_det = inputs[1]
 
         b, h, w, c = x.shape
-
-        reverse_indices = [0]*c
 
         if forward:
             if self.perm_type == "1x1":
@@ -173,22 +173,15 @@ class Permutation(Layer):
                 return outputs, log_det
 
             elif self.perm_type == "reverse":
-                output = inputs[:, :, :, ::-1]
-                log_det = 0
+                output = x[:, :, :, ::-1]
+                log_det += 0
 
                 return output, log_det
 
             elif self.perm_type == "shuffle":
-                rng_seed = abs(hash('shuffle')) % 10000000
-                n_channels = c
-                indices = np.arange(n_channels)
-                shuffled_indices = np.random.RandomState(seed=rng_seed).permutation(indices)
-                permuted_output = tf.gather(inputs, shuffled_indices, axis=3)
+                permuted_output = tf.gather(inputs, self.indices, axis=3)
+                log_det += 0
 
-                for i in range(n_channels):
-                    reverse_indices[shuffled_indices[i]] = i
-
-                log_det = 0
                 return permuted_output, log_det
 
         else:
@@ -206,12 +199,12 @@ class Permutation(Layer):
                 return outputs, log_det
 
             elif self.perm_type == "reverse":
-                outputs = inputs[:, :, :, ::-1]
+                outputs = x[:, :, :, ::-1]
 
                 return outputs
 
             elif self.perm_type == "shuffle":
-                reverse_permute_output = tf.gather(inputs, reverse_indices, axis=3)
+                reverse_permute_output = tf.gather(inputs, self.reverse_indicies, axis=3)
 
                 return reverse_permute_output
 
