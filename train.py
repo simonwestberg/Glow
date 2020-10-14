@@ -28,9 +28,6 @@ def preprocess(X_train, X_test):
 
 (X_train, Y_train), (X_test, Y_test) = mnist.load_data()
 
-# Preprocess?
-X_train, X_test = preprocess(X_train, X_test)
-
 # Add channel dimension
 X_train = np.expand_dims(X_train, axis=3)
 X_test = np.expand_dims(X_test, axis=3)
@@ -39,20 +36,12 @@ X_test = np.expand_dims(X_test, axis=3)
 X_train = np.pad(X_train, pad_width=((0, 0), (2, 2), (2, 2), (0, 0)))
 X_test = np.pad(X_test, pad_width=((0, 0), (2, 2), (2, 2), (0, 0)))
 
+# Preprocess?
+X_train, X_test = preprocess(X_train, X_test)
+
 # Train
 model = Glow(steps=3, levels=2, img_shape=(32, 32, 1), hidden_channels=128, perm_type="1x1")
 adam = keras.optimizers.Adam(learning_rate=1e-3)
 model.compile(optimizer=adam)
 
 model.fit(X_train, epochs=2, batch_size=128)
-
-# Encoding and sampling
-
-# Encode x
-x = X_train[0, :, :, :].reshape((1, 32, 32, 1))
-z, log_det = model(x, forward=True)
-
-# Sample z and decode to generate image
-z = model.latent_distribution.sample()
-
-x, log_det = model(z, forward=False)

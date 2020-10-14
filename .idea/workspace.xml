@@ -22,6 +22,7 @@
     <list default="true" id="182583ce-38e0-4368-b782-957fc6db5bee" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/model.py" beforeDir="false" afterPath="$PROJECT_DIR$/model.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/train.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -38,7 +39,7 @@
   <component name="Git.Settings">
     <option name="RECENT_BRANCH_BY_REPOSITORY">
       <map>
-        <entry key="$PROJECT_DIR$" value="main" />
+        <entry key="$PROJECT_DIR$" value="forward_backward" />
       </map>
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -51,7 +52,7 @@
   <component name="PropertiesComponent">
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$/../KEX" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/../MachineLearning" />
     <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
   </component>
   <component name="RunManager" selected="Python.model">
@@ -185,14 +186,14 @@
       <screen x="0" y="0" width="1536" height="824" />
     </state>
     <state x="356" y="0" key="CommitChangelistDialog2/0.0.1536.824@0.0.1536.824" timestamp="1602598852705" />
-    <state x="93" y="93" width="1350" height="638" maximized="true" key="DiffContextDialog" timestamp="1602598839119">
+    <state x="93" y="93" width="1350" height="638" maximized="true" key="DiffContextDialog" timestamp="1602687013750">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
-    <state x="93" y="93" width="1350" height="638" maximized="true" key="DiffContextDialog/0.0.1536.824@0.0.1536.824" timestamp="1602598839119" />
-    <state x="592" y="218" key="FileChooserDialogImpl" timestamp="1601899394908">
+    <state x="93" y="93" width="1350" height="638" maximized="true" key="DiffContextDialog/0.0.1536.824@0.0.1536.824" timestamp="1602687013750" />
+    <state x="592" y="218" key="FileChooserDialogImpl" timestamp="1602601025773">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
-    <state x="592" y="218" key="FileChooserDialogImpl/0.0.1536.824@0.0.1536.824" timestamp="1601899394908" />
+    <state x="592" y="218" key="FileChooserDialogImpl/0.0.1536.824@0.0.1536.824" timestamp="1602601025773" />
     <state x="740" y="275" key="FileChooserDialogImpl/0.0.1920.1040@0.0.1920.1040" timestamp="1601641136048" />
     <state width="1509" height="123" key="GridCell.Tab.0.bottom" timestamp="1602513013395">
       <screen x="0" y="0" width="1536" height="824" />
@@ -223,9 +224,9 @@
       <screen x="0" y="0" width="1920" height="1040" />
     </state>
     <state x="769" y="434" key="com.intellij.openapi.vcs.update.UpdateOrStatusOptionsDialogupdate-v2/0.0.1920.1040@0.0.1920.1040" timestamp="1601640787894" />
-    <state x="427" y="158" key="git4idea.merge.GitPullDialog" timestamp="1602512624255">
+    <state x="427" y="158" key="git4idea.merge.GitPullDialog" timestamp="1602613395137">
       <screen x="0" y="0" width="1536" height="824" />
     </state>
-    <state x="427" y="158" key="git4idea.merge.GitPullDialog/0.0.1536.824@0.0.1536.824" timestamp="1602512624255" />
+    <state x="427" y="158" key="git4idea.merge.GitPullDialog/0.0.1536.824@0.0.1536.824" timestamp="1602613395137" />
   </component>
 </project>

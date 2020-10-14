@@ -265,7 +265,7 @@ class AffineCoupling(Layer):
             output = tf.concat((y_a, y_b), axis=3)
 
             _log_det = tf.math.log(tf.math.abs(s))
-            log_det += tf.math.reduce_sum(_log_det)
+            log_det += tf.math.reduce_sum(_log_det) / tf.cast(tf.shape(x)[0], dtype=tf.float32)
 
             return output, log_det
 
@@ -280,7 +280,7 @@ class AffineCoupling(Layer):
             output = tf.concat((x_a, x_b), axis=3)
 
             _log_det = tf.math.log(tf.math.abs(s))
-            log_det -= tf.math.reduce_sum(_log_det)
+            log_det -= tf.math.reduce_sum(_log_det) / tf.cast(tf.shape(x)[0], dtype=tf.float32)
 
             return output, log_det
 
@@ -349,7 +349,7 @@ def log(x, base):
 
 class Glow(keras.Model):
 
-    def __init__(self, steps, levels, img_shape, hidden_channels, perm_type="1x1"):
+    def __init__(self, steps, levels, img_shape, hidden_channels, perm_type="1x1", alpha=0.05):
         super(Glow, self).__init__()
 
         assert (len(img_shape) == 3)
@@ -360,6 +360,7 @@ class Glow(keras.Model):
         self.dimension = self.height * self.width * self.channels   # Dimension of input/latent space
         self.hidden_channels = hidden_channels
         self.perm_type = perm_type
+        self.alpha = alpha
 
         # Normal distribution with 0 mean and std=1, defined over R^dimension
         self.latent_distribution = tf_prob.distributions.MultivariateNormalDiag(
@@ -376,12 +377,46 @@ class Glow(keras.Model):
 
             self.flow_layers.append(flows)
 
+    def preprocess(self, x):
+        """Expects images x without any pre-processing, with pixel values in [0, 255]"""
+        x = tf.cast(x, dtype=tf.float32)
+        x = x + tf.random.uniform(shape=tf.shape(x), minval=0, maxval=1)
+        x = tf.math.divide(x, 256)
+        x = self.alpha + (1 - self.alpha) * x
+
+        # log-determinant
+        log_det = tf.math.log((1 - self.alpha) / 256.0) - tf.math.log(x) - tf.math.log(1 - x)
+        log_det = tf.linalg.diag_part(log_det)
+        log_det = tf.reduce_sum(log_det) / tf.cast(tf.shape(x)[0], dtype=tf.float32)
+
+        # logit
+        x = tf.math.log(tf.math.divide(x, 1 - x))
+
+        return x, log_det
+
+    def sample_image(self):
+        # If we use "ordinary" pre-precessing, should we "undo" the pre-processing of the generated images? i.e.
+        # multiply by training std, add training mean
+        
+        # Sample latent variable
+        z = self.latent_distribution.sample()
+        # Decode z
+        x, log_det = self(z, forward=False)
+        # Sigmoid to squeeze pixel values to [0, 1]???
+        x = tf.math.sigmoid(x)
+
+        x = np.floor(x * 255)
+
+        return x, log_det
+
     def call(self, inputs, forward=True):
 
         if forward:
             x = inputs
-            latent_variables = []
             log_det = 0.0
+            #x, log_det = self.preprocess(x)
+
+            latent_variables = []
 
             for l in range(self.levels - 1):
 
