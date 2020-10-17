@@ -479,7 +479,6 @@ class Glow(keras.Model):
                 z = self.squeeze(z, forward=forward)
 
             x = z
-            
             # TODO return NLL instead of log_det
             # c = -self.dimension * np.log(1 / 256)
 
