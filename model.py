@@ -4,28 +4,9 @@ import tensorflow_probability as tf_prob
 from tensorflow import keras
 from tensorflow.keras.layers import Layer
 import numpy as np
+from matplotlib import pyplot as plt
 
 ### LAYERS
-
-## https://www.tensorflow.org/guide/keras/custom_layers_and_models
-
-## Skeleton for custom layer
-class MyLayer(Layer):
-
-    def __init__(self):
-        super(MyLayer, self).__init__()
-
-    # Create the state of the layer (weights)
-    def build(self, input_shape):
-        pass
-
-    # Defines the computation from inputs to outputs
-    def call(self, inputs):
-        """
-        inputs: input tensor
-        returns: output tensor
-        """
-        return inputs
 
 ## ActNorm
 class ActNorm(Layer):
@@ -35,7 +16,7 @@ class ActNorm(Layer):
 
     # Create the state of the layer. ActNorm initialization is done in call()
     def build(self, input_shape):
-        b, h, w, c = input_shape[0]    # Batch size, height, width, channels
+        b, h, w, c = input_shape[0]  # Batch size, height, width, channels
 
         # Scale parameters per channel, called 's' in Glow
         self.scale = self.add_weight(
@@ -57,6 +38,7 @@ class ActNorm(Layer):
 
         self.initialized.assign(False)
 
+    @tf.function
     def call(self, inputs, forward=True):
         """
         inputs: list containing [input tensor, log_det]
@@ -78,7 +60,7 @@ class ActNorm(Layer):
             and unit variance per channel. 
             """
 
-            assert(len(x.shape) == 4)
+            assert (len(x.shape) == 4)
 
             # Calculate mean per channel
             mean = tf.math.reduce_mean(x, axis=[0, 1, 2], keepdims=True)
@@ -143,7 +125,7 @@ class Permutation(Layer):
         elif self.perm_type == "shuffle":
             rng_seed = abs(hash(self.perm_type)) % 10000000
             self.indices = np.random.RandomState(seed=rng_seed).permutation(np.arange(c))
-            self.reverse_indicies = [0]*c
+            self.reverse_indicies = [0] * c
             for i in range(c):
                 self.reverse_indicies[self.indices[i]] = i
 
@@ -200,16 +182,13 @@ class Permutation(Layer):
 
             elif self.perm_type == "reverse":
                 outputs = x[:, :, :, ::-1]
-                
                 log_det -= 0
 
                 return outputs, log_det
 
             elif self.perm_type == "shuffle":
                 reverse_permute_output = tf.gather(x, self.reverse_indicies, axis=3)
-                
                 log_det -= 0
-                
                 return reverse_permute_output, log_det
 
 
@@ -257,32 +236,46 @@ class AffineCoupling(Layer):
             x_a, x_b = tf.split(x, num_or_size_splits=2, axis=3)
 
             # split along the channels again? to get log_s and t
-            log_s, t = tf.split(self.NN(x_b), num_or_size_splits=2, axis=3)
-            s = tf.math.exp(log_s)
-            y_a = tf.math.multiply(s, x_a) + t
+            # log_s, t = tf.split(self.NN(x_b), num_or_size_splits=2, axis=3)
+
+            nn_output = self.NN(x_b)
+            log_s = nn_output[:, :, :, 0::2]
+            t = nn_output[:, :, :, 1::2]
+            s = tf.math.sigmoid(log_s + 2)
+
+            # y_a = tf.math.multiply(s, x_a) + t
+            y_a = tf.math.multiply(s, x_a + t)
 
             y_b = x_b
             output = tf.concat((y_a, y_b), axis=3)
 
             _log_det = tf.math.log(tf.math.abs(s))
-            log_det += tf.math.reduce_sum(_log_det) / tf.cast(tf.shape(x)[0], dtype=tf.float32)
+            _log_det = tf.math.reduce_sum(_log_det, axis=[1, 2, 3])
+            log_det += tf.math.reduce_mean(_log_det)
 
             return output, log_det
 
         # the reverse calculations, if forward is False
         else:
             y_a, y_b = tf.split(x, num_or_size_splits=2, axis=3)
-            log_s, t = tf.split(self.NN(y_b), num_or_size_splits=2, axis=3)
-            s = tf.math.exp(log_s)
+            # log_s, t = tf.split(self.NN(y_b), num_or_size_splits=2, axis=3)
 
-            x_a = tf.math.divide((y_a - t), s)
+            nn_output = self.NN(y_b)
+            log_s = nn_output[:, :, :, 0::2]
+            t = nn_output[:, :, :, 1::2]
+
+            s = tf.math.sigmoid(log_s + 2)
+
+            x_a = tf.math.divide(y_a, s) - t
             x_b = y_b
             output = tf.concat((x_a, x_b), axis=3)
 
             _log_det = tf.math.log(tf.math.abs(s))
-            log_det -= tf.math.reduce_sum(_log_det) / tf.cast(tf.shape(x)[0], dtype=tf.float32)
+            _log_det = tf.math.reduce_sum(_log_det, axis=[1, 2, 3])
+            log_det -= tf.math.reduce_mean(_log_det)
 
             return output, log_det
+
 
 ## Squeeze, no trainable parameters
 class Squeeze(Layer):
@@ -302,6 +295,7 @@ class Squeeze(Layer):
             outputs = tf.nn.depth_to_space(inputs, block_size=2)
 
         return outputs
+
 
 ## Step of flow
 class FlowStep(Layer):
@@ -335,21 +329,12 @@ class FlowStep(Layer):
 
         return x, log_det
 
-def log(x, base):
-    """
-    x: tensor
-    b: int
-    returns log_base(x)
-    """
-    numerator = tf.math.log(x)
-    denominator = tf.math.log(tf.constant(base, dtype=numerator.dtype))
-    return numerator / denominator
 
 ### MODEL
 
 class Glow(keras.Model):
 
-    def __init__(self, steps, levels, img_shape, hidden_channels, perm_type="1x1", alpha=0.05):
+    def __init__(self, steps, levels, img_shape, hidden_channels, perm_type="1x1"):
         super(Glow, self).__init__()
 
         assert (len(img_shape) == 3)
@@ -357,10 +342,9 @@ class Glow(keras.Model):
         self.steps = steps  # Number of steps in each flow, K in the paper
         self.levels = levels  # Number of levels, L in the paper
         self.height, self.width, self.channels = img_shape
-        self.dimension = self.height * self.width * self.channels   # Dimension of input/latent space
+        self.dimension = self.height * self.width * self.channels  # Dimension of input/latent space
         self.hidden_channels = hidden_channels
         self.perm_type = perm_type
-        self.alpha = alpha
 
         # Normal distribution with 0 mean and std=1, defined over R^dimension
         self.latent_distribution = tf_prob.distributions.MultivariateNormalDiag(
@@ -379,33 +363,25 @@ class Glow(keras.Model):
 
     def preprocess(self, x):
         """Expects images x without any pre-processing, with pixel values in [0, 255]"""
-        x = tf.cast(x, dtype=tf.float32)
-        x = x + tf.random.uniform(shape=tf.shape(x), minval=0, maxval=1)
-        x = tf.math.divide(x, 256)
-        x = self.alpha + (1 - self.alpha) * x
+        x = x / 256 - 0.5
+        x = x + tf.random.uniform(shape=tf.shape(x), minval=0, maxval=1 / 256.0, dtype=x.dtype)
 
-        # log-determinant
-        log_det = tf.math.log((1 - self.alpha) / 256.0) - tf.math.log(x) - tf.math.log(1 - x)
-        log_det = tf.linalg.diag_part(log_det)
-        log_det = tf.reduce_sum(log_det) / tf.cast(tf.shape(x)[0], dtype=tf.float32)
+        # x = x + tf.random.uniform(shape=tf.shape(x), minval=0, maxval=1, dtype=x.dtype)
+        # x = x / 256.0
 
-        # logit
-        x = tf.math.log(tf.math.divide(x, 1 - x))
-
-        return x, log_det
+        return x
 
     def sample_image(self):
         # If we use "ordinary" pre-precessing, should we "undo" the pre-processing of the generated images? i.e.
         # multiply by training std, add training mean
-        
+
         # Sample latent variable
         z = self.latent_distribution.sample()
         # Decode z
         x, log_det = self(z, forward=False)
-        # Sigmoid to squeeze pixel values to [0, 1]???
-        x = tf.math.sigmoid(x)
 
-        x = np.floor(x * 255)
+        x = np.clip(x, -0.5, 0.5)
+        x = x + 0.5
 
         return x, log_det
 
@@ -414,7 +390,7 @@ class Glow(keras.Model):
         if forward:
             x = inputs
             log_det = 0.0
-            #x, log_det = self.preprocess(x)
+            x = self.preprocess(x)
 
             latent_variables = []
 
@@ -446,21 +422,25 @@ class Glow(keras.Model):
             latent_variables = tf.concat(latent_variables, axis=1)
 
             latent_logprob = self.latent_distribution.log_prob(latent_variables)
-            latent_logprob = tf.reduce_mean(latent_logprob)
+            latent_logprob = tf.math.reduce_mean(latent_logprob)
 
-            self.add_loss(-latent_logprob - log_det)
+            c = -self.dimension * np.log(1 / 256)
 
-            return latent_variables, log_det
+            # Average NLL of the images in bits/dimension
+            NLL = (-latent_logprob - log_det + c) / (np.log(2) * self.dimension)
+
+            self.add_loss(NLL)
+
+            return latent_variables, NLL
 
         else:
             # Run the model backwards, assuming that inputs is a sampled latent variable of full dimension
-            assert (inputs.shape == self.dimension)
 
             # Extract slices of the latent variables to be used in reverse split function
             latent_variables = []
 
-            start = 0   # Starting index of the slice for z_i
-            stop = 0    # Stopping index of the slice for z_i
+            start = 0  # Starting index of the slice for z_i
+            stop = 0  # Stopping index of the slice for z_i
 
             for l in range(self.levels - 1):
                 stop += self.dimension // (2 ** (l + 1))
@@ -473,9 +453,9 @@ class Glow(keras.Model):
 
             # Extract last latent variable and reshape
             z = latent_variables[-1]
-            c_last = self.channels * 2 ** (self.levels + 1)     # nr of channels in the last latent output
+            c_last = self.channels * 2 ** (self.levels + 1)  # nr of channels in the last latent output
             h_last = self.height // (2 ** self.levels)  # height of the last latent output
-            w_last = self.width // (2 ** self.levels)   # width of the last latent output
+            w_last = self.width // (2 ** self.levels)  # width of the last latent output
             z = tf.reshape(z, shape=(1, h_last, w_last, c_last))
 
             # Last steps of flow
@@ -498,4 +478,12 @@ class Glow(keras.Model):
 
                 z = self.squeeze(z, forward=forward)
 
-            return z, log_det
+            x = z
+            
+            # TODO return NLL instead of log_det
+            # c = -self.dimension * np.log(1 / 256)
+
+            # Total log-prob of the images in bits/dimension
+            # log_prob_x = (latent_logprob + log_det + c) / (np.log(2) * self.dimension)
+
+            return x, log_det
