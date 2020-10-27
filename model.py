@@ -4,7 +4,6 @@ import tensorflow_probability as tf_prob
 from tensorflow import keras
 from tensorflow.keras.layers import Layer
 import numpy as np
-from matplotlib import pyplot as plt
 
 ### LAYERS
 
@@ -21,19 +20,21 @@ class ActNorm(Layer):
         # Scale parameters per channel, called 's' in Glow
         self.scale = self.add_weight(
             shape=(1, 1, 1, c),
-            trainable=True
-        )
+            trainable=True,
+            name="actnorm_scale_" + str(np.random.randint(0, 1e6)))
 
         # Bias parameter per channel, called 'b' in Glow
         self.bias = self.add_weight(
             shape=(1, 1, 1, c),
-            trainable=True
+            trainable=True,
+            name="actnorm_bias_" + str(np.random.randint(0, 1e6))
         )
 
         # Used to check if scale and bias have been initialized
         self.initialized = self.add_weight(
             trainable=False,
-            dtype=tf.bool
+            dtype=tf.bool,
+            name="actnorm_initialized_" + str(np.random.randint(0, 1e6))
         )
 
         self.initialized.assign(False)
@@ -73,13 +74,13 @@ class ActNorm(Layer):
             std = tf.math.add(std, eps)
 
             self.scale.assign(tf.math.divide(1.0, std))
-            self.bias.assign(-tf.math.divide(mean, std))
+            self.bias.assign(-mean)
 
             self.initialized.assign(True)
 
         if forward:
 
-            outputs = tf.math.multiply(x, self.scale) + self.bias
+            outputs = tf.math.multiply(x + self.bias, self.scale)
 
             # log-determinant of ActNorm layer
             log_s = tf.math.log(tf.math.abs(self.scale))
@@ -89,12 +90,13 @@ class ActNorm(Layer):
 
         else:
             # Reverse operation
-            outputs = (x - self.bias) / self.scale
+            outputs = (x / self.scale) - self.bias
 
             # log-determinant of ActNorm layer
             log_s = tf.math.log(tf.math.abs(self.scale))
             log_det -= h * w * tf.math.reduce_sum(log_s)
             return outputs, log_det
+
 
 ## Permutation (1x1 convolution, reverse, or shuffle)
 class Permutation(Layer):
@@ -117,7 +119,8 @@ class Permutation(Layer):
             self.W = self.add_weight(
                 shape=(1, 1, c, c),
                 trainable=True,
-                initializer=tf.keras.initializers.orthogonal
+                initializer=tf.keras.initializers.orthogonal,
+                name="1x1_W_" + str(np.random.randint(0, 1e6))
             )
         elif self.perm_type == "reverse":
             pass
@@ -182,13 +185,16 @@ class Permutation(Layer):
 
             elif self.perm_type == "reverse":
                 outputs = x[:, :, :, ::-1]
+
                 log_det -= 0
 
                 return outputs, log_det
 
             elif self.perm_type == "shuffle":
                 reverse_permute_output = tf.gather(x, self.reverse_indicies, axis=3)
+
                 log_det -= 0
+
                 return reverse_permute_output, log_det
 
 
@@ -204,7 +210,6 @@ class AffineCoupling(Layer):
         self.NN = tf.keras.Sequential()
         self.hidden_channels = hidden_channels
 
-    # Create the state of the layer (weights)
     def build(self, input_shape):
         b, h, w, c = input_shape[0]
 
@@ -214,11 +219,7 @@ class AffineCoupling(Layer):
         self.NN.add(tf.keras.layers.Conv2D(self.hidden_channels, kernel_size=1,
                                            activation='relu', strides=(1, 1),
                                            padding='same'))
-        self.NN.add(tf.keras.layers.Conv2D(c, kernel_size=3,
-                                           activation='relu', strides=(1, 1),
-                                           padding='same',
-                                           kernel_initializer=
-                                           tf.keras.initializers.Zeros))
+        self.NN.add(Conv2D_zeros(c))
 
     # Defines the computation from inputs to outputs
     def call(self, inputs, forward=True):
@@ -235,15 +236,11 @@ class AffineCoupling(Layer):
             # split along the channels, which is axis=3
             x_a, x_b = tf.split(x, num_or_size_splits=2, axis=3)
 
-            # split along the channels again? to get log_s and t
-            # log_s, t = tf.split(self.NN(x_b), num_or_size_splits=2, axis=3)
-
             nn_output = self.NN(x_b)
             log_s = nn_output[:, :, :, 0::2]
             t = nn_output[:, :, :, 1::2]
             s = tf.math.sigmoid(log_s + 2)
 
-            # y_a = tf.math.multiply(s, x_a) + t
             y_a = tf.math.multiply(s, x_a + t)
 
             y_b = x_b
@@ -258,7 +255,6 @@ class AffineCoupling(Layer):
         # the reverse calculations, if forward is False
         else:
             y_a, y_b = tf.split(x, num_or_size_splits=2, axis=3)
-            # log_s, t = tf.split(self.NN(y_b), num_or_size_splits=2, axis=3)
 
             nn_output = self.NN(y_b)
             log_s = nn_output[:, :, :, 0::2]
@@ -277,7 +273,7 @@ class AffineCoupling(Layer):
             return output, log_det
 
 
-## Squeeze, no trainable parameters
+## Squeeze
 class Squeeze(Layer):
 
     def __init__(self):
@@ -297,6 +293,103 @@ class Squeeze(Layer):
         return outputs
 
 
+class Split(Layer):
+
+    def __init__(self, split=True):
+        super(Split, self).__init__()
+        self.split = split
+
+    def build(self, input_shape):
+        b, h, w, c = input_shape
+
+        # Uses learnt prior instead of fixed mean and std
+        if self.split:
+            self.prior = Conv2D_zeros(filters=c)
+        else:
+            self.prior = Conv2D_zeros(filters=2 * c)
+
+    def call(self, inputs, forward=True, reconstruct=False):
+
+        if forward:
+            b, h, w, c = inputs.shape
+
+            if self.split:
+                x, z = tf.split(inputs, num_or_size_splits=2, axis=3)
+                mean, log_sd = tf.split(self.prior(x), num_or_size_splits=2, axis=3)
+                log_p = gaussian_logprob(z, mean, log_sd)
+                log_p = tf.math.reduce_sum(log_p, axis=[1, 2, 3])
+                log_p = tf.math.reduce_mean(log_p, axis=0)
+
+                return x, z, log_p
+            else:
+                zero = tf.zeros_like(inputs)
+                mean, log_sd = tf.split(self.prior(zero), num_or_size_splits=2, axis=3)
+                log_p = gaussian_logprob(inputs, mean, log_sd)
+                log_p = tf.math.reduce_sum(log_p, axis=[1, 2, 3])
+                log_p = tf.math.reduce_mean(log_p, axis=0)
+                z = inputs
+
+                return z, log_p
+
+        else:
+            if reconstruct:
+                if self.split:
+                    z, z_add = inputs[0], inputs[1]
+                    return tf.concat([z, z_add], axis=3)
+
+                else:
+                    return inputs
+
+            if self.split:
+                z, z_add = inputs[0], inputs[1]
+                mean, log_sd = tf.split(self.prior(z), num_or_size_splits=2, axis=3)
+                z_sample = mean + tf.math.exp(log_sd) * z_add
+
+                z = tf.concat([z, z_sample], axis=3)
+                return z
+            else:
+                zero = tf.zeros_like(inputs)
+                mean, log_sd = tf.split(self.prior(zero), num_or_size_splits=2, axis=3)
+                z = mean + tf.math.exp(log_sd) * inputs
+                return z
+
+
+class Conv2D_zeros(Layer):
+
+    def __init__(self, filters):
+        super(Conv2D_zeros, self).__init__()
+        self.filters = filters
+
+    def build(self, input_shape):
+        # Get shape
+        b, h, w, c = input_shape
+
+        self.conv = tf.keras.layers.Conv2D(self.filters,
+                                           kernel_size=3,
+                                           strides=(1, 1),
+                                           padding="same",
+                                           activation=None,
+                                           kernel_initializer="zeros",
+                                           bias_initializer="zeros")
+
+        self.scale = self.add_weight(
+            shape=(1, 1, 1, self.filters),
+            trainable=True,
+            initializer="zeros",
+            name="conv2D_zeros_scale_" + str(np.random.randint(0, 1e6))
+        )
+
+    def call(self, inputs):
+        x = self.conv(inputs)
+        x = x * tf.math.exp(self.scale * 3)
+
+        return x
+
+
+def gaussian_logprob(x, mean, log_sd):
+    return -0.5 * tf.math.log(2 * np.pi) - log_sd - 0.5 * (x - mean) ** 2 / tf.math.exp(2 * log_sd)
+
+
 ## Step of flow
 class FlowStep(Layer):
 
@@ -308,7 +401,6 @@ class FlowStep(Layer):
         self.perm = Permutation(perm_type)
         self.coupling = AffineCoupling(hidden_channels)
 
-    # Defines the computation from inputs to outputs
     def call(self, inputs, forward=True):
         """
         inputs: list containing [input tensor, log_det]
@@ -330,7 +422,7 @@ class FlowStep(Layer):
         return x, log_det
 
 
-### MODEL
+### Glow model
 
 class Glow(keras.Model):
 
@@ -352,6 +444,7 @@ class Glow(keras.Model):
 
         self.squeeze = Squeeze()
         self.flow_layers = []
+        self.split_layers = []
 
         for l in range(levels):
             flows = []
@@ -361,35 +454,36 @@ class Glow(keras.Model):
 
             self.flow_layers.append(flows)
 
+            if l != levels - 1:
+                self.split_layers.append(Split(split=True))
+            else:
+                self.split_layers.append(Split(split=False))
+
     def preprocess(self, x):
         """Expects images x without any pre-processing, with pixel values in [0, 255]"""
-        x = x / 256 - 0.5
+        x = x / 255.0 - 0.5  # Normalize to lie in [-0.5, 0.5]
+        # Add uniform noise
         x = x + tf.random.uniform(shape=tf.shape(x), minval=0, maxval=1 / 256.0, dtype=x.dtype)
-
-        # x = x + tf.random.uniform(shape=tf.shape(x), minval=0, maxval=1, dtype=x.dtype)
-        # x = x / 256.0
 
         return x
 
-    def sample_image(self):
-        # If we use "ordinary" pre-precessing, should we "undo" the pre-processing of the generated images? i.e.
-        # multiply by training std, add training mean
+    def sample_image(self, temperature):
 
         # Sample latent variable
-        z = self.latent_distribution.sample()
+        z = self.latent_distribution.sample() * temperature
         # Decode z
-        x, log_det = self(z, forward=False)
+        x = self(z, forward=False)
 
         x = np.clip(x, -0.5, 0.5)
         x = x + 0.5
+        return x
 
-        return x, log_det
-
-    def call(self, inputs, forward=True):
+    def call(self, inputs, forward=True, reconstruct=False):
 
         if forward:
             x = inputs
             log_det = 0.0
+            sum_log_p = 0.0
             x = self.preprocess(x)
 
             latent_variables = []
@@ -402,8 +496,9 @@ class Glow(keras.Model):
                 for k in range(self.steps):
                     x, log_det = self.flow_layers[l][k]([x, log_det], forward=forward)
 
-                # Split into two parts along channel dimension
-                z, x = tf.split(x, num_or_size_splits=2, axis=3)
+                # Split
+                x, z, log_p = self.split_layers[l](x, forward=forward)
+                sum_log_p += log_p
 
                 latent_dim = np.prod(z.shape[1:])  # Dimension of extracted z
                 latent_variables.append(tf.reshape(z, [-1, latent_dim]))
@@ -415,19 +510,19 @@ class Glow(keras.Model):
             for k in range(self.steps):
                 x, log_det = self.flow_layers[-1][k]([x, log_det], forward=forward)
 
-            latent_dim = np.prod(x.shape[1:])  # Dimension of last latent variable
-            latent_variables.append(tf.reshape(x, [-1, latent_dim]))
+            z, log_p = self.split_layers[-1](x, forward=forward)
+            sum_log_p += log_p
+
+            latent_dim = np.prod(z.shape[1:])  # Dimension of last latent variable
+            latent_variables.append(tf.reshape(z, [-1, latent_dim]))
 
             # Concatenate latent variables
             latent_variables = tf.concat(latent_variables, axis=1)
 
-            latent_logprob = self.latent_distribution.log_prob(latent_variables)
-            latent_logprob = tf.math.reduce_mean(latent_logprob)
-
             c = -self.dimension * np.log(1 / 256)
 
             # Average NLL of the images in bits/dimension
-            NLL = (-latent_logprob - log_det + c) / (np.log(2) * self.dimension)
+            NLL = (-sum_log_p - log_det + c) / (np.log(2) * self.dimension)
 
             self.add_loss(NLL)
 
@@ -458,6 +553,8 @@ class Glow(keras.Model):
             w_last = self.width // (2 ** self.levels)  # width of the last latent output
             z = tf.reshape(z, shape=(1, h_last, w_last, c_last))
 
+            z = self.split_layers[-1](z, forward=forward, reconstruct=reconstruct)
+
             # Last steps of flow
             for k in reversed(range(self.steps)):
                 z, log_det = self.flow_layers[-1][k]([z, log_det], forward=forward)
@@ -470,7 +567,8 @@ class Glow(keras.Model):
                 # Extract latent variable, reshape, and concatenate along channel dimension (reverse split)
                 z_add = latent_variables[l]
                 z_add = tf.reshape(z_add, shape=z.shape)
-                z = tf.concat([z_add, z], axis=3)
+
+                z = self.split_layers[l]([z, z_add], forward=forward, reconstruct=reconstruct)
 
                 # K steps of flow
                 for k in reversed(range(self.steps)):
@@ -479,10 +577,5 @@ class Glow(keras.Model):
                 z = self.squeeze(z, forward=forward)
 
             x = z
-            # TODO return NLL instead of log_det
-            # c = -self.dimension * np.log(1 / 256)
 
-            # Total log-prob of the images in bits/dimension
-            # log_prob_x = (latent_logprob + log_det + c) / (np.log(2) * self.dimension)
-
-            return x, log_det
+            return x
