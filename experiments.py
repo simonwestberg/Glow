@@ -140,7 +140,7 @@ images = []
 
 for r in range(rows):
     for c in range(cols):
-        x, _ = model.sample_image(temperature=0.7)
+        x = model.sample_image(temperature=0.7)
         images.append(x)
 
 # Plot
