@@ -1,7 +1,7 @@
 # Replicating Glow and Investigating Its Performance on OOD-detection
 
 In this project we implement the flow-based deep generative model Glow from the paper "Glow: Generative Flow with Invertible 1x1 Convolutions" by Kingma and Dhariwal (https://arxiv.org/abs/1807.03039). We train the model on MNIST and reproduce some of the main results from the original paper. Additionally, we investigate
-the model's performance on Out-of-Distribution (OOD) detection using typicality tests. The implementation was done in TensorFlow using Keras and the project was done as part of the course DD2412 Advanced Deep Learning at KTH. The report detailing our method and findings can be seen [here](report.pdf)
+the model's performance on Out-of-Distribution (OOD) detection using typicality tests. The implementation was done in TensorFlow using Keras and the project was done as part of the course DD2412 Advanced Deep Learning at KTH. The report detailing our method and findings can be seen [here](report.pdf).
 
 ## Architecture
 
@@ -47,7 +47,7 @@ produces realistic images with smooth transitions.
 
 ### Out-of-Distribution detection
 
-To assess the models ability to distinguish between In-Distribution samples (i.e. samples from MNIST) and Out-of-Distribution (OOD) samples, we performed so-called [typicality tests](https://arxiv.org/abs/1906.02994). In essence, typicality tests try to determine if a batch of unseen data is OOD by estimating if the batch belongs to the *typical set* of the model's probability density. We performed typicality tests on batches of data from the test sets of MNIST, EMNIST-Letters, and Fashion MNIST. The results can be seen in the table below (for different batch sizes). Using typicality tests, the model is able to classify samples from Fashion MNIST as OOD almost perfectly for all batch sizes. For EMNIST Letters, the model's OOD-accuracy differ greatly depending on the batch size (which can most likely be explained by the similarities present between certain digits in MNIST and certain letters in EMNIST-Letters). 
+To assess the model's ability to distinguish between In-Distribution samples (i.e. samples from MNIST) and Out-of-Distribution (OOD) samples, we performed so-called [typicality tests](https://arxiv.org/abs/1906.02994). In essence, typicality tests try to determine if a batch of unseen data is OOD by estimating if the batch belongs to the *typical set* of the model's probability density. We performed typicality tests on batches of data from the test sets of MNIST, EMNIST-Letters, and Fashion MNIST. The results can be seen in the table below (for different batch sizes). Using typicality tests, the model is able to classify samples from Fashion MNIST as OOD almost perfectly for all batch sizes. For EMNIST Letters, the model's OOD-accuracy differ greatly depending on the batch size (which can most likely be explained by the similarities present between certain digits in MNIST and certain letters in EMNIST-Letters). 
 
 &nbsp;
 &nbsp;
